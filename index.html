@@ -23,17 +23,6 @@
         background: #231F20;
       }
 
-      #usage-info {
-        position: absolute;
-        top: 10px;
-        left: 10px;
-        background-color: rgba(0, 0, 0, 0.7);
-        color: white;
-        padding: 10px;
-        font-family: monospace;
-        z-index: 20;
-      }
-
       #fullscreen-button {
         position: absolute;
         bottom: 20px;
@@ -64,8 +53,6 @@
       </div>
       <div id="unity-warning"> </div>
     </div>
-
-    <div id="usage-info"></div>
 
     <button id="fullscreen-button">Go Fullscreen</button>
 
@@ -129,9 +116,6 @@
             progressBarFull.style.width = 100 * progress + "%";
           }).then((unityInstance) => {
             loadingBar.style.display = "none";
-            
-            // Start performance tracking after Unity instance is loaded
-            displayUsageInfo();
 
           }).catch((message) => {
             alert(message);
@@ -139,44 +123,6 @@
         };
         document.body.appendChild(script);
       });
-
-      // Function to estimate CPU and RAM usage
-      function displayUsageInfo() {
-        const infoElement = document.getElementById('usage-info');
-        var startTime = performance.now();
-        var lastTime = performance.now();
-        
-        function estimateCPUUsage() {
-          var now = performance.now();
-          var cpuTime = now - lastTime;
-          var totalTime = now - startTime;
-          lastTime = now;
-
-          // Estimate CPU usage as a ratio of CPU processing time over total time
-          var cpuUsage = Math.min(100, Math.round((cpuTime / totalTime) * 100));
-          return cpuUsage;
-        }
-
-        function updateUsage() {
-          // Estimate CPU Usage
-          const cpuUsage = estimateCPUUsage();
-
-          // Memory usage info
-          const memory = window.performance.memory || { totalJSHeapSize: 0, usedJSHeapSize: 0, jsHeapSizeLimit: 0 };
-          const ramUsagePercentage = Math.round((memory.usedJSHeapSize / memory.jsHeapSizeLimit) * 100);
-
-          // Update the information on the page
-          infoElement.innerHTML = `
-            <strong>Performance:</strong><br>
-            CPU Usage: ${cpuUsage}%<br>
-            RAM Usage: ${ramUsagePercentage}%<br>
-            Used Memory: ${(memory.usedJSHeapSize / 1048576).toFixed(2)}MB<br>
-            Total Memory: ${(memory.jsHeapSizeLimit / 1048576).toFixed(2)}MB<br>
-          `;
-        }
-
-        setInterval(updateUsage, 1000); // Update usage every second
-      }
 
       // Fullscreen button functionality
       var fullscreenButton = document.querySelector("#fullscreen-button");

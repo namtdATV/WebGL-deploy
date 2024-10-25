@@ -361,6 +361,22 @@ function SendMessage(gameObject, func, param) {
 }
 // Export SendMessage out from the JS module via the Module export object
 Module["SendMessage"] = SendMessage;
+// Create a promise that is resolved later when "RunWebGLPlayer" was run
+// We can ignore the reject handler as the UnityLoader registers a global startupErrorHandler
+var _resolvePlayerIsInitialized;
+var _playerIsInitializedPromise = new Promise(function (resolve) {
+    _resolvePlayerIsInitialized = resolve;
+});
+
+// Waits for unity player initialization to finish, i.e., load initial scene
+function _WaitForInitialization() {
+    return _playerIsInitializedPromise;
+}
+
+Module["WebPlayer"] = {    
+    PlayerIsInitialized: _resolvePlayerIsInitialized,
+    WaitForInitialization: _WaitForInitialization,
+};
 
 
 // Sometimes an existing Module object exists with properties
@@ -1266,10 +1282,10 @@ function dbg(text) {
 // === Body ===
 
 var ASM_CONSTS = {
-  5554304: () => { Module['emscripten_get_now_backup'] = performance.now; },  
- 5554359: ($0) => { performance.now = function() { return $0; }; },  
- 5554407: ($0) => { performance.now = function() { return $0; }; },  
- 5554455: () => { performance.now = Module['emscripten_get_now_backup']; }
+  5572736: () => { Module['emscripten_get_now_backup'] = performance.now; },  
+ 5572791: ($0) => { performance.now = function() { return $0; }; },  
+ 5572839: ($0) => { performance.now = function() { return $0; }; },  
+ 5572887: () => { performance.now = Module['emscripten_get_now_backup']; }
 };
 
 
@@ -1628,15 +1644,15 @@ var ASM_CONSTS = {
     }
 
   function _GetJSLoadTimeInfo(loadTimePtr) {
-    loadTimePtr = loadTimePtr >>= 2;
+    loadTimePtr = (loadTimePtr >> 2);
     HEAPU32[loadTimePtr] = Module.pageStartupTime || 0;
     HEAPU32[loadTimePtr + 1] = Module.dataUrlLoadEndTime || 0;
     HEAPU32[loadTimePtr + 2] = Module.codeDownloadTimeEnd || 0;
    }
 
   function _GetJSMemoryInfo(totalJSptr, usedJSptr) {
-      totalJSptr = totalJSptr >>= 3;
-      usedJSptr = usedJSptr >>= 3;
+      totalJSptr = (totalJSptr >> 3);
+      usedJSptr = (usedJSptr >> 3);
       if (performance.memory) {
         HEAPF64[totalJSptr] = performance.memory.totalJSHeapSize;
         HEAPF64[usedJSptr] = performance.memory.usedJSHeapSize;
@@ -1908,7 +1924,7 @@ var ASM_CONSTS = {
   				error instanceof TypeError
   			) &&
   			error.message.indexOf('dynCall_') != -1
-  		) {			
+  		) {
   			error.message = 'Detected use of deprecated "Module.dynCall_*" API. Use "makeDynCall" API instead. Refer to https://docs.unity3d.com/6000.0/Documentation/Manual/web-interacting-browser-deprecated.html#dyncall for more information.\n' + error.message;
   		}
   
@@ -2479,8 +2495,8 @@ var ASM_CONSTS = {
   
   function _JS_MobileKeyboard_GetTextSelection(outStart, outLength)
   {
-      outStart = outStart >>= 2;
-      outLength = outLength >>= 2;
+      outStart = (outStart >> 2);
+      outLength = (outLength >> 2);
   
       if (!mobile_input) {
           HEAP32[outStart] = 0;
@@ -6881,18 +6897,6 @@ var ASM_CONSTS = {
   	}
   }
 
-  function _JS_Sound_IsStopped(channelInstance)
-  {
-  	if (WEBAudio.audioWebEnabled == 0)
-  		return true;
-  	
-  	var channel = WEBAudio.audioInstances[channelInstance];
-  	if (!channel)
-  		return true;
-  
-  	return channel.isStopped();
-  }
-
   
   function jsAudioCreateUncompressedSoundClipFromCompressedAudio(audioData) {
   	var soundClip = jsAudioCreateUncompressedSoundClip(null, false);
@@ -7426,8 +7430,8 @@ var ASM_CONSTS = {
   			w = size.width;
   			h = size.height;
   		}
-  		outWidth = outWidth >>= 3;
-  		outHeight = outHeight >>= 3;
+  		outWidth = (outWidth >> 3);
+  		outHeight = (outHeight >> 3);
   		HEAPF64[outWidth] = w;
   		HEAPF64[outHeight] = h;
   	}
@@ -7473,8 +7477,8 @@ var ASM_CONSTS = {
 
   function _JS_SystemInfo_GetScreenSize(outWidth, outHeight)
   	{
-  		outWidth = outWidth >>= 3;
-  		outHeight = outHeight >>= 3;
+  		outWidth = (outWidth >> 3);
+  		outHeight = (outHeight >> 3);
   		HEAPF64[outWidth] = Module.SystemInfo.width;
   		HEAPF64[outHeight] = Module.SystemInfo.height;
   	}
@@ -7556,6 +7560,14 @@ var ASM_CONSTS = {
           Module["WebGPU"].commandEncoder = encoder;
       }
 
+  function utf8(ptr) {
+      return UTF8ToString(ptr);
+    }
+  
+  function wgpu_checked_shift(ptr, shift) {
+      assert((ptr >>> shift) << shift == ptr);
+      return ptr >>> shift;
+    }
   var wgpu = {};
   function _JS_WebGPU_Setup(adapter, device)
       {
@@ -7563,6 +7575,10 @@ var ASM_CONSTS = {
           Module["WebGPU"].adapter = wgpu[adapter];
           Module["WebGPU"].device = wgpu[device];
       }
+
+  function _JS_WebPlayer_FinishInitialization() {
+  		Module.WebPlayer.PlayerIsInitialized();
+  	}
 
   function ___assert_fail(condition, filename, line, func) {
       abort(`Assertion failed: ${UTF8ToString(condition)}, at: ` + [filename ? UTF8ToString(filename) : 'unknown filename', line, func ? UTF8ToString(func) : 'unknown function']);
@@ -14931,7 +14947,6 @@ var ASM_CONSTS = {
       return type;
     }
 
-  var replaceAll_polyfill;if (!String.prototype.replaceAll) String.prototype.replaceAll = function(str, newStr) { if (str === '?') str = '\\?'; return this.replace(str instanceof RegExp ? str : new RegExp(str, 'g'), newStr); }
   /** @param {number=} ch */
   function wgpuDecodeStrings(s, c, ch) {
       ch = ch || 65;
@@ -14967,13 +14982,11 @@ var ASM_CONSTS = {
         // this object is known by on Wasm side.
         object.wid = wgpuIdCounter;
   
-        return wgpuIdCounter;
+        ;
+  
+        return wgpuIdCounter++;
       }
       // Implicit return undefined to marshal ID 0 over to Wasm.
-    }
-  
-  function debugDir(x, desc) {
-      return x;
     }
   
   function _wgpuMuteJsExceptions(fn) {
@@ -14991,9 +15004,9 @@ var ASM_CONSTS = {
       assert(adapterCallback, "must pass a callback function to navigator_gpu_request_adapter_async!", "assert(adapterCallback, 'must pass a callback function to navigator_gpu_request_adapter_async!') failed!");
       assert(navigator["gpu"], "Your browser does not support WebGPU!", "assert(navigator['gpu'], 'Your browser does not support WebGPU!') failed!");
       assert(options != 0, "assert(options != 0) failed!");
-      assert(options % 4 == 0, "assert(options % 4 == 0) failed!"); // Must be aligned at uint32_t boundary
   
-      options >>= 2
+      assert((options >> 2) << 2 == options);
+  options >>= 2;
   
       let gpu = navigator['gpu'],
         powerPreference = [, 'low-power', 'high-performance'][HEAPU32[options]],
@@ -15008,16 +15021,17 @@ var ASM_CONSTS = {
         
         function cb(adapter) {
           
-          
           ((a1, a2) => dynCall_vii.apply(null, [adapterCallback, a1, a2]))(wgpuStore(adapter), userData);
         }
-        gpu['requestAdapter'](opts).then(_wgpuMuteJsExceptions(cb)).catch(
+        gpu['requestAdapter'](opts)
+          .then(_wgpuMuteJsExceptions(cb))
+          .catch(
           (e)=>{console.error(`navigator.gpu.requestAdapter() Promise failed: ${e}`); cb(/*intentionally omit arg to pass undefined*/)}
         );
-        return 1/*EM_TRUE*/;
+        return 1/*WGPU_TRUE*/;
       }
       
-      // Implicit return EM_FALSE, WebGPU is not supported.
+      // Implicit return WGPU_FALSE, WebGPU is not supported.
     }
 
   
@@ -15358,7 +15372,7 @@ var ASM_CONSTS = {
       return _strftime(s, maxsize, format, tm); // no locale support yet
     }
 
-  var _wgpuFeatures = wgpuDecodeStrings('A-Ccontrol A32E-Dencil8GbcGetc2GaDc timeDamp-query indirect-firD-inB shader-f16 rg11b10uE-rendFbgra8unorm-Dorage E32-filtFCdiBs', ' texture-compression-|erable |float|st|clip-|Dance|depth').slice(1);
+  var _wgpuFeatures = wgpuDecodeStrings('A-Ccontrol A32F-Dencil8GbcGbc-sliced-3dGetc2GaDc timeDamp-query indirect-firD-inB shader-f16 rg11b10uF-rendEbgra8unorm-Dorage F32-filtECdiBs dual-source-blending', ' texture-compression-|float|erable |st|clip-|Dance|depth').slice(1);
   function _wgpu_adapter_or_device_get_features(adapterOrDevice) {
       
       assert(adapterOrDevice != 0, "assert(adapterOrDevice != 0) failed!");
@@ -15366,14 +15380,20 @@ var ASM_CONSTS = {
       assert(wgpu[adapterOrDevice] instanceof GPUAdapter || wgpu[adapterOrDevice] instanceof GPUDevice, "assert(wgpu[adapterOrDevice] instanceof GPUAdapter || wgpu[adapterOrDevice] instanceof GPUDevice) failed!");
       let id = 1,
         featuresBitMask = 0;
+  
+      
+  
       for(let feature of _wgpuFeatures) {
-        if (wgpu[adapterOrDevice]['features'].has(feature)) featuresBitMask |= id;
+        if (wgpu[adapterOrDevice]['features'].has(feature)) {
+          
+          featuresBitMask |= id;
+        }
         id *= 2;
       }
       return featuresBitMask;
     }
 
-  var _wgpu32BitLimitNames = wgpuDecodeStrings('>1D >2D >3D maxTextureArrayLayer<6<6sPlus7=<BindingsPer6 maxDynamicUniform=;DynamicS:=;SampledTexture@maxSampler@maxS:=@maxS:Texture@maxUniform=@minUniform=9inS:=9ax7=<7Attribute<7=ArrayStride max8Component<8Variable<ColorAttachment<ColorAttachmentBytesPerSample?pS:Size maxComputeInvocationsPerWorkgroup?pSizeX?pSizeY?pSizeZ', 'sPerShaderStage | maxComputeWorkgrou|maxTextureDimension|Buffer|s max|sPerPipelineLayout max|torage|OffsetAlignment m|InterStageShader|Vertex|BindGroup|Uniform7|8ColorAttachmen', 52).slice(1);
+  var _wgpu32BitLimitNames = wgpuDecodeStrings('max<1D=<2D=<3D=T4ArrayLayers=9s=9sPlus5>s=BindingsPer9=DynamicUniform>:=Dynamic;e>:=SampledT4s@axSamplers@ax;e>s@ax;eT4s@axUniform>s@inUniform>6t min;e>6t=5>s=5Attributes=5>ArrayStride=InterStageShaderVariables=ColorAttachments=ColorAttachmentBytesPerSample?;eSize=ComputeInvocationsPerWorkgroup?SizeX?SizeY?SizeZ', 'PerShaderStage m| maxComputeWorkgroup|Buffer| max|TextureDimension|Storag|sPerPipelineLayout|BindGroup|s7ColorAttachment|Uniform6|OffsetAlignmen|Vertex|exture', 52).slice(1);
   
   var _wgpu64BitLimitNames = wgpuDecodeStrings('maxUniform4Storage4BufferSize', 'BufferBindingSize max', 52).slice(1);
   
@@ -15385,14 +15405,14 @@ var ASM_CONSTS = {
   function _wgpu_adapter_or_device_get_limits(adapterOrDevice, limits) {
       
       assert(limits != 0, "passed a null limits struct pointer", "assert(limits != 0, 'passed a null limits struct pointer') failed!");
-      assert(limits % 4 == 0, "passed an unaligned limits struct pointer", "assert(limits % 4 == 0, 'passed an unaligned limits struct pointer') failed!");
       assert(adapterOrDevice != 0, "assert(adapterOrDevice != 0) failed!");
       assert(wgpu[adapterOrDevice], "assert(wgpu[adapterOrDevice]) failed!");
       assert(wgpu[adapterOrDevice] instanceof GPUAdapter || wgpu[adapterOrDevice] instanceof GPUDevice, "assert(wgpu[adapterOrDevice] instanceof GPUAdapter || wgpu[adapterOrDevice] instanceof GPUDevice) failed!");
   
       let l = wgpu[adapterOrDevice]['limits'];
   
-      limits >>= 2
+      assert((limits >> 2) << 2 == limits);
+  limits >>= 2;
       for(let limitName of _wgpu64BitLimitNames) {
         assert(l[limitName] !== undefined, `Browser WebGPU implementation incorrect: it should advertise limit ${limitName}`, "assert(l[limitName] !== undefined, `Browser WebGPU implementation incorrect: it should advertise limit ${limitName}`) failed!");
         wgpuWriteI53ToU64HeapIdx(limits, l[limitName]);
@@ -15412,46 +15432,59 @@ var ASM_CONSTS = {
       assert(heap32Idx != 0, "assert(heap32Idx != 0) failed!");
       return HEAPU32[heap32Idx] + HEAPU32[heap32Idx+1] * 4294967296;
     }
+  function wgpuReadSupportedLimits(heap32Idx) {
+      let requiredLimits = {}, v;
   
+      // Marshal all the complex 64-bit quantities first ..
+      for(let limitName of _wgpu64BitLimitNames) {
+        if ((v = wgpuReadI53FromU64HeapIdx(heap32Idx))) requiredLimits[limitName] = v;
+        heap32Idx += 2;
+      }
   
+      // .. followed by the 32-bit quantities.
+      for(let limitName of _wgpu32BitLimitNames) {
+        if ((v = HEAPU32[heap32Idx++])) requiredLimits[limitName] = v;
+      }
+      return requiredLimits;
+    }
+  
+  function wgpuReadQueueDescriptor(heap32Idx) {
+      return HEAPU32[heap32Idx] ? { 'label': utf8(HEAPU32[heap32Idx]) } : void 0;
+    }
+  
+  function wgpuReadFeaturesBitfield(heap32Idx) {
+      let requiredFeatures = [], v = HEAPU32[heap32Idx];
+  
+      assert(_wgpuFeatures.length == 14, "assert(_wgpuFeatures.length == 14) failed!");
+      assert(_wgpuFeatures.length <= 30, "assert(_wgpuFeatures.length <= 30) failed!"); // We can only do up to 30 distinct feature bits here with the current code.
+      
+      for(let i = 0; i < 14/*_wgpuFeatures.length*/; ++i) {
+        if (v & (1 << i)) requiredFeatures.push(_wgpuFeatures[i]);
+      } 
+      return requiredFeatures;
+    }
+  function wgpuReadDeviceDescriptor(descriptor) {
+      assert(descriptor != 0, "assert(descriptor != 0) failed!");
+      assert((descriptor >> 2) << 2 == descriptor);
+  descriptor >>= 2;
+  
+      return {
+        'requiredLimits': wgpuReadSupportedLimits(descriptor),
+        'defaultQueue': wgpuReadQueueDescriptor(descriptor+34/*sizeof(WGpuSupportedLimits)*/),
+        'requiredFeatures': wgpuReadFeaturesBitfield(descriptor+36/*sizeof(WGpuSupportedLimits)+sizeof(WGpuQueueDescriptor)*/)
+      };
+    }
   /** @suppress{checkTypes} */
   function _wgpu_adapter_request_device_async(adapter, descriptor, deviceCallback, userData) {
       
       assert(adapter != 0, "assert(adapter != 0) failed!");
       assert(wgpu[adapter], "assert(wgpu[adapter]) failed!");
       assert(wgpu[adapter] instanceof GPUAdapter, "assert(wgpu[adapter] instanceof GPUAdapter) failed!");
-      assert(descriptor != 0, "assert(descriptor != 0) failed!");
-      assert(descriptor % 4 == 0, "assert(descriptor % 4 == 0) failed!"); // Must be aligned at uint32_t boundary
-  
-      descriptor >>= 2
-      let requiredFeatures = [], requiredLimits = {}, v = HEAPU32[descriptor], defaultQueueLabel;
-      descriptor += 2;
-  
-      assert(_wgpuFeatures.length == 12, "assert(_wgpuFeatures.length == 12) failed!");
-      assert(_wgpuFeatures.length <= 30, "assert(_wgpuFeatures.length <= 30) failed!"); // We can only do up to 30 distinct feature bits here with the current code.
-  
-      for(let i = 0; i < 12/*_wgpuFeatures.length*/; ++i) {
-        if (v & (1 << i)) requiredFeatures.push(_wgpuFeatures[i]);
-      }
-  
-      // Marshal all the complex 64-bit quantities first ..
-      for(let limitName of _wgpu64BitLimitNames) {
-        if ((v = wgpuReadI53FromU64HeapIdx(descriptor))) requiredLimits[limitName] = v;
-        descriptor += 2;
-      }
-  
-      // .. followed by the 32-bit quantities.
-      for(let limitName of _wgpu32BitLimitNames) {
-        if ((v = HEAPU32[descriptor++])) requiredLimits[limitName] = v;
-      }
   
       function cb(device) {
         // If device is non-null, initialization succeeded.
         
-        
         if (device) {
-          device.derivedObjects = []; // A large number of objects are derived from GPUDevice (GPUBuffers, GPUTextures, GPUSamplers, ....)
-  
           // Register an ID for the queue of this newly created device
           wgpuStore(device['queue']);
         }
@@ -15459,17 +15492,12 @@ var ASM_CONSTS = {
         ((a1, a2) => dynCall_vii.apply(null, [deviceCallback, a1, a2]))(wgpuStore(device), userData);
       }
   
-      defaultQueueLabel = HEAPU32[descriptor];
-      wgpu[adapter]['requestDevice'](
-        debugDir(
-          {
-            'requiredFeatures': requiredFeatures,
-            'requiredLimits': requiredLimits,
-            'defaultQueue': defaultQueueLabel ? { 'label': UTF8ToString(defaultQueueLabel) } : void 0
-          },
-          'GPUAdapter.requestDevice() with desc'
-        )
-      ).then(_wgpuMuteJsExceptions(cb)).catch(
+      let desc = wgpuReadDeviceDescriptor(descriptor);
+  
+      ;
+      wgpu[adapter]['requestDevice'](desc)
+        .then(_wgpuMuteJsExceptions(cb))
+        .catch(
         (e)=>{console.error(`GPUAdapter.requestDevice() Promise failed: ${e}`); cb(/*intentionally omit arg to pass undefined*/)}
       );
     }
@@ -15487,15 +15515,12 @@ var ASM_CONSTS = {
       
       gpuBuffer = wgpu[gpuBuffer];
       try {
-        // Awkward polymorphism: cannot pass undefined as size to map whole buffer, but must call the shorter function.
-        gpuBuffer.mappedRanges[offset] = size < 0 ? gpuBuffer['getMappedRange'](offset) : gpuBuffer['getMappedRange'](offset, size);
+        gpuBuffer.mappedRanges[offset] = gpuBuffer['getMappedRange'](offset, size < 0 ? void 0 : size);
       } catch(e) {
         // E.g. if the GPU ran out of memory when creating a new buffer, this can fail. 
         
-        
         return -1;
       }
-      
       
       return offset;
     }
@@ -15510,9 +15535,7 @@ var ASM_CONSTS = {
       assert(Number.isSafeInteger(size), "assert(Number.isSafeInteger(size)) failed!");
       assert(size >= -1, "assert(size >= -1) failed!");
   
-      let bufferObject = wgpu[buffer];
-      // Awkward polymorphism: must call different version of mapAsync to use default 'size' value.
-      (size < 0 ? bufferObject['mapAsync'](mode, offset) : bufferObject['mapAsync'](mode, offset, size)).then(() => {
+      wgpu[buffer]['mapAsync'](mode, offset, size < 0 ? void 0 : size).then(() => {
         ((a1, a2, a3, a4, a5) => dynCall_viiidd.apply(null, [callback, a1, a2, a3, a4, a5]))(buffer, userData, mode, offset, size);
       });
     }
@@ -15554,14 +15577,14 @@ var ASM_CONSTS = {
   function wgpuReadArrayOfWgpuObjects(ptr, numObjects) {
       assert(numObjects >= 0, "assert(numObjects >= 0) failed!");
       assert(ptr != 0 || numObjects == 0, "assert(ptr != 0 || numObjects == 0) failed!"); // Must be non-null pointer
-      assert(ptr % 4 == 0, "assert(ptr % 4 == 0) failed!"); // Must be aligned at uint32_t boundary
-      ptr >>= 2
+      assert((ptr >> 2) << 2 == ptr);
+  ptr >>= 2;
   
-      let arrayOfObjects = [];
-      while(numObjects--) {
+      var arrayOfObjects = new Array(numObjects);
+      for(var i = 0; i < numObjects;) {
         assert(HEAPU32[ptr], "assert(HEAPU32[ptr]) failed!"); // Must reference a nonzero WebGPU object handle
         assert(wgpu[HEAPU32[ptr]], "assert(wgpu[HEAPU32[ptr]]) failed!"); // Must reference a valid WebGPU object
-        arrayOfObjects.push(wgpu[HEAPU32[ptr++]]);
+        arrayOfObjects[i++] = wgpu[HEAPU32[ptr++]];
       }
       return arrayOfObjects;
     }
@@ -15571,37 +15594,52 @@ var ASM_CONSTS = {
       assert(wgpu[canvasContext], "assert(wgpu[canvasContext]) failed!");
       assert(wgpu[canvasContext] instanceof GPUCanvasContext, "assert(wgpu[canvasContext] instanceof GPUCanvasContext) failed!");
       assert(config != 0, "assert(config != 0) failed!"); // Must be non-null
-      assert(config % 4 == 0, "assert(config % 4 == 0) failed!"); // Must be aligned at uint32_t boundary
   
-      config >>= 2
-      wgpu[canvasContext]['configure'](
-        debugDir(
-          {
-            'device': wgpu[HEAPU32[config]],
-            'format': GPUTextureAndVertexFormats[HEAPU32[config+1]],
-            'usage': HEAPU32[config+2],
-            'viewFormats': wgpuReadArrayOfWgpuObjects(HEAPU32[config+4], HEAPU32[config+3]),
-            'colorSpace': HTMLPredefinedColorSpaces[HEAPU32[config+5]],
-            'alphaMode': [, 'opaque', 'premultiplied'][HEAPU32[config+6]]
-          },
-          'canvasContext.configure() with config'
-        )
-      );
+      assert((config >> 2) << 2 == config);
+  config >>= 2;
+  
+      let desc = {
+        'device': wgpu[HEAPU32[config]],
+        'format': GPUTextureAndVertexFormats[HEAPU32[config+1]],
+        'usage': HEAPU32[config+2],
+        'viewFormats': wgpuReadArrayOfWgpuObjects(HEAPU32[config  + 4], HEAPU32[config+3]),
+        'colorSpace': HTMLPredefinedColorSpaces[HEAPU32[config+6]],
+        'toneMapping': {
+          'mode': [, 'standard', 'extended'][HEAPU32[config+7]]
+        },
+        'alphaMode': [, 'opaque', 'premultiplied'][HEAPU32[config+8]]
+      };
+  
+      ;
+      wgpu[canvasContext]['configure'](desc);
     }
 
   function _wgpu_object_destroy(object) {
       let o = wgpu[object];
       assert(o || !wgpu.hasOwnProperty(object), 'wgpu dictionary should never be storing key-values with null/undefined value in it', "assert(o || !wgpu.hasOwnProperty(object), 'wgpu dictionary should never be storing key-values with null/undefined value in it') failed!");
       if (o) {
+        // Make sure if there might exist any other references to this JS object, that they will no longer see the .wid
+        // field, since this object no longer exists in the wgpu table.
+        o.wid = 0;
         // WebGPU objects of type GPUDevice, GPUBuffer, GPUTexture and GPUQuerySet have an explicit .destroy() function. Call that if applicable.
-        // Do not try to destroy the canvas texture, which is always object 1.
-        if (object != 1 && o['destroy']) o['destroy']();
+        if (o['destroy']) o['destroy']();
         // If the given object has derived objects (GPUTexture -> GPUTextureViews), delete those in a hierarchy as well.
-        if (o.derivedObjects) o.derivedObjects.forEach(_wgpu_object_destroy);
+        if (o.derivedObjects) Object.keys(o.derivedObjects).forEach(_wgpu_object_destroy);
+        // If this object has a parent, unlink this object from its parent.
+        if (o.parentObject) delete o.parentObject.derivedObjects[object];
         // Finally erase reference to this object.
         delete wgpu[object];
       }
       assert(!wgpu.hasOwnProperty(object), 'object should have gotten deleted', "assert(!wgpu.hasOwnProperty(object), 'object should have gotten deleted') failed!");
+    }
+  
+  function wgpuLinkParentAndChild(parent, childId, child) {
+      child.parentObject = parent; // Link child->parent
+  
+      // WebGPU objects form an object hierarchy, and deleting an object (adapter, device, texture, etc.) will
+      // destroy all child objects in the hierarchy)
+      if (!parent.derivedObjects) parent.derivedObjects = {};
+      parent.derivedObjects[childId] = child; // Link parent->child
     }
   function _wgpu_canvas_context_get_current_texture(canvasContext) {
       
@@ -15609,44 +15647,39 @@ var ASM_CONSTS = {
       assert(wgpu[canvasContext], "assert(wgpu[canvasContext]) failed!");
       assert(wgpu[canvasContext] instanceof GPUCanvasContext, "assert(wgpu[canvasContext] instanceof GPUCanvasContext) failed!");
   
+      canvasContext = wgpu[canvasContext];
       // The canvas context texture is a special texture that automatically invalidates itself after the current rAF()
       // callback if over. Therefore when a new swap chain texture is produced, we need to delete the old one to avoid
       // accumulating references to stale textures from each frame.
   
       // Acquire the new canvas context texture..
-      canvasContext = wgpu[canvasContext]['getCurrentTexture']();
-      assert(canvasContext, "assert(canvasContext) failed!");
-      // The browser implementation for getCurrentTexture() should always return a new texture for each frame, so
-      // derivedObjects array should not have a chance to pile up (a lot of) derived views. It is observed that
-      // Chrome at least will temporarily return the same texture when it is not compositing, in which case
-      // derivedObjects will have ~20-50(?) old derived views simultaneously. These will clear up when Chrome
-      // actually starts compositing.
-      assert(!canvasContext.derivedObjects || canvasContext.derivedObjects.length < 1000, "assert(!canvasContext.derivedObjects || canvasContext.derivedObjects.length < 1000) failed!");
-      if (canvasContext != wgpu[1]) {
+      var canvasTexture = canvasContext['getCurrentTexture']();
+      assert(canvasTexture, "assert(canvasTexture) failed!");
+      if (canvasTexture != wgpu[1]) {
         // ... and destroy previous special canvas context texture, if it was an old one.
         _wgpu_object_destroy(1);
-        wgpu[1] = canvasContext;
-        canvasContext.wid = 1;
-        canvasContext.derivedObjects = []; // GPUTextureViews are derived off of GPUTextures
+        wgpu[1] = canvasTexture;
+        canvasTexture.wid = 1;
+        wgpuLinkParentAndChild(canvasContext, 1, canvasTexture);
       }
-      // The canvas context texture is hardcoded the special ID 1. Return that to caller.
+      // The canvas context texture is hardcoded the special ID 1. Return that ID to caller.
       return 1;
     }
 
-  
-  
   function _wgpu_canvas_get_webgpu_context(canvasSelector) {
       
-      return wgpuStore(
-        debugDir(
-          debugDir(
-            document.querySelector(UTF8ToString(canvasSelector)),
-            'canvas'
-          )
-          .getContext('webgpu'),
-          'canvas.getContext("webgpu")'
-        )
-      );
+      assert(canvasSelector, "assert(canvasSelector) failed!");
+  
+      // Search Canvas elements in DOM.
+      let canvas = document.querySelector(utf8(canvasSelector));
+      ;
+  
+      let ctx = canvas.getContext('webgpu');
+      ;
+  
+      if (ctx.wid) return ctx.wid;
+  
+      return wgpuStore(ctx);
     }
 
   function wgpuReadTimestampWrites(timestampWritesIndex) {
@@ -15664,53 +15697,66 @@ var ASM_CONSTS = {
       assert(wgpu[commandEncoder], "assert(wgpu[commandEncoder]) failed!");
       assert(wgpu[commandEncoder] instanceof GPUCommandEncoder, "assert(wgpu[commandEncoder] instanceof GPUCommandEncoder) failed!");
       // descriptor may be a null pointer
-      assert(descriptor % 4 == 0, "assert(descriptor % 4 == 0) failed!"); // Must be aligned at uint32_t boundary
   
       commandEncoder = wgpu[commandEncoder];
-      descriptor >>= 2
+      assert((descriptor >> 2) << 2 == descriptor);
+  descriptor >>= 2;
   
       let desc = {
         'timestampWrites': wgpuReadTimestampWrites(descriptor)
       };
   
       
-      
-      let computePassEncoder = commandEncoder['beginComputePass'](desc);
-      
-      
-  
-      return wgpuStore(computePassEncoder);
+      return wgpuStore(commandEncoder['beginComputePass'](desc));
     }
 
   var GPULoadOps = [,"load","clear"];
   
   var GPUStoreOps = [,"store","discard"];
   
+  
+  function wgpuReadRenderPassDepthStencilAttachment(heap32Idx) {
+      return HEAPU32[heap32Idx] ? {
+          'view': wgpu[HEAPU32[heap32Idx]],
+          'depthLoadOp': GPULoadOps[HEAPU32[heap32Idx+1]],
+          'depthClearValue': HEAPF32[heap32Idx+2],
+          'depthStoreOp': GPUStoreOps[HEAPU32[heap32Idx+3]],
+          'depthReadOnly': !!HEAPU32[heap32Idx+4],
+          'stencilLoadOp': GPULoadOps[HEAPU32[heap32Idx+5]],
+          'stencilClearValue': HEAPU32[heap32Idx+6],
+          'stencilStoreOp': GPUStoreOps[HEAPU32[heap32Idx+7]],
+          'stencilReadOnly': !!HEAPU32[heap32Idx+8],
+        } : void 0;
+    }
   function _wgpu_command_encoder_begin_render_pass(commandEncoder, descriptor) {
       
       assert(commandEncoder != 0, "assert(commandEncoder != 0) failed!");
       assert(wgpu[commandEncoder], "assert(wgpu[commandEncoder]) failed!");
       assert(wgpu[commandEncoder] instanceof GPUCommandEncoder, "assert(wgpu[commandEncoder] instanceof GPUCommandEncoder) failed!");
       assert(descriptor != 0, "assert(descriptor != 0) failed!");
-      assert(descriptor % 4 == 0, "assert(descriptor % 4 == 0) failed!"); // Must be aligned at uint32_t boundary
   
-      descriptor >>= 2
+      assert((descriptor >> 2) << 2 == descriptor);
+  descriptor >>= 2;
   
       let colorAttachments = [],
-        numColorAttachments = HEAP32[descriptor++],
-        colorAttachmentsIdx = HEAPU32[descriptor++] >> 2,
+        numColorAttachments = HEAP32[descriptor+4],
+        colorAttachmentsIdx = wgpu_checked_shift(HEAPU32[descriptor+2], 2),
         colorAttachmentsIdxDbl = colorAttachmentsIdx + 6 >> 1, // Alias the view for HEAPF64.
-        depthStencilView = wgpu[HEAPU32[descriptor]];
+        maxDrawCount = HEAPF64[descriptor >> 1],
+        depthStencilAttachment = HEAPU32[descriptor+5];
+  
+      assert(Number.isSafeInteger(maxDrawCount), "assert(Number.isSafeInteger(maxDrawCount)) failed!"); // 'maxDrawCount' is a double_int53_t
+      assert(maxDrawCount >= 0, "assert(maxDrawCount >= 0) failed!");
   
       assert(colorAttachmentsIdx % 2 == 0, "assert(colorAttachmentsIdx % 2 == 0) failed!"); // Must be aligned at double boundary
-      assert(depthStencilView || !HEAPU32[descriptor], "assert(depthStencilView || !HEAPU32[descriptor]) failed!");
+      assert(depthStencilAttachment == 0 || wgpu[depthStencilAttachment] instanceof GPUTextureView, "assert(depthStencilAttachment == 0 || wgpu[depthStencilAttachment] instanceof GPUTextureView) failed!"); // Must point to a valid WebGPU texture view object if nonzero
   
       assert(numColorAttachments >= 0, "assert(numColorAttachments >= 0) failed!");
       while(numColorAttachments--) {
         // If view is 0, then this attachment is to be sparse.
         colorAttachments.push(HEAPU32[colorAttachmentsIdx] ? {
           'view': wgpu[HEAPU32[colorAttachmentsIdx]],
-          'depthSlice': HEAP32[colorAttachmentsIdx+1] < 0 ? undefined : HEAP32[colorAttachmentsIdx+1], // Awkward polymorphism: spec does not allow 'depthSlice' to be given a value (even 0) if attachment is not a 3D texture.
+          'depthSlice': HEAP32[colorAttachmentsIdx+1] < 0 ? void 0 : HEAP32[colorAttachmentsIdx+1], // Awkward polymorphism: spec does not allow 'depthSlice' to be given a value (even 0) if attachment is not a 3D texture.
           'resolveTarget': wgpu[HEAPU32[colorAttachmentsIdx+2]],
           'storeOp': GPUStoreOps[HEAPU32[colorAttachmentsIdx+3]],
           'loadOp': GPULoadOps[HEAPU32[colorAttachmentsIdx+4]],
@@ -15718,76 +15764,23 @@ var ASM_CONSTS = {
                          HEAPF64[colorAttachmentsIdxDbl+2], HEAPF64[colorAttachmentsIdxDbl+3]]
         } : null);
   
-        colorAttachmentsIdx += 14;
-        colorAttachmentsIdxDbl += 7;
+        colorAttachmentsIdx += 14; // sizeof(WGpuRenderPassColorAttachment)
+        colorAttachmentsIdxDbl += 7; // sizeof(WGpuRenderPassColorAttachment)/2
       }
   
-      assert(Number.isSafeInteger(HEAPF64[descriptor+10>>1]), "assert(Number.isSafeInteger(HEAPF64[descriptor+10>>1])) failed!"); // 'maxDrawCount' is a double_int53_t
-      assert(HEAPF64[descriptor+10>>1] >= 0, "assert(HEAPF64[descriptor+10>>1] >= 0) failed!");
-  
-      return wgpuStore(
-        debugDir(
-          wgpu[commandEncoder]['beginRenderPass'](
-            debugDir(
-              {
-                'colorAttachments': colorAttachments,
-                // Awkward polymorphism: cannot specify 'view': undefined if no depth-stencil attachment
-                // is to be present, but must pass null as the whole attachment object.
-                'depthStencilAttachment': depthStencilView ? {
-                  'view': depthStencilView,
-                  'depthLoadOp': GPULoadOps[HEAPU32[descriptor+1]],
-                  'depthClearValue': HEAPF32[descriptor+2],
-                  'depthStoreOp': GPUStoreOps[HEAPU32[descriptor+3]],
-                  'depthReadOnly': !!HEAPU32[descriptor+4],
-                  'stencilLoadOp': GPULoadOps[HEAPU32[descriptor+5]],
-                  'stencilClearValue': HEAPU32[descriptor+6],
-                  'stencilStoreOp': GPUStoreOps[HEAPU32[descriptor+7]],
-                  'stencilReadOnly': !!HEAPU32[descriptor+8],
-                } : void 0,
-                'occlusionQuerySet': wgpu[HEAPU32[descriptor+9]],
-                // Read 'maxDrawCount'. If set to zero, pass in undefined to use the default value
-                // (likely 50 million, but omit it in case the spec might change in the future)
-                'maxDrawCount': HEAPF64[descriptor+10>>1] || void 0,
-                'timestampWrites': wgpuReadTimestampWrites(descriptor+12)
-              },
-              'GPUCommandEncoder.beginRenderPass() with desc'
-            )
-          ),
-          'returned'
-        )
-      );
-    }
-
-  
-  function _wgpu_command_encoder_begin_render_pass_1color_0depth(commandEncoder, descriptor) {
-      
-      assert(commandEncoder != 0, "assert(commandEncoder != 0) failed!");
-      assert(wgpu[commandEncoder], "assert(wgpu[commandEncoder]) failed!");
-      assert(wgpu[commandEncoder] instanceof GPUCommandEncoder, "assert(wgpu[commandEncoder] instanceof GPUCommandEncoder) failed!");
-      assert(descriptor != 0, "assert(descriptor != 0) failed!");
-      assert(descriptor % 4 == 0, "assert(descriptor % 4 == 0) failed!"); // Must be aligned at uint32_t boundary
-  
-      descriptor >>= 2
-  
-      assert(HEAP32[descriptor] == 1, "assert(HEAP32[descriptor] == 1) failed!"); // Must be passing exactly one color target.
-      assert(HEAPU32[descriptor+2] == 0, "assert(HEAPU32[descriptor+2] == 0) failed!"); // Must be passing no depth-stencil target.
-  
-      let colorAttachmentsIdx = HEAPU32[descriptor+1] >> 2,
-        colorAttachmentsIdxDbl = colorAttachmentsIdx + 6 >> 1; // Alias the view for HEAPF64.
-  
-      assert(colorAttachmentsIdx % 2 == 0, "assert(colorAttachmentsIdx % 2 == 0) failed!"); // Must be aligned at double boundary
-  
-      return wgpuStore(debugDir(wgpu[commandEncoder]['beginRenderPass'](debugDir({
-          'colorAttachments': [{
-            'view': wgpu[HEAPU32[colorAttachmentsIdx]],
-            'depthSlice': HEAP32[colorAttachmentsIdx+1] < 0 ? undefined : HEAP32[colorAttachmentsIdx+1], // Awkward polymorphism: spec does not allow 'depthSlice' to be given a value (even 0) if attachment is not a 3D texture.
-            'resolveTarget': wgpu[HEAPU32[colorAttachmentsIdx+2]],
-            'storeOp': GPUStoreOps[HEAPU32[colorAttachmentsIdx+3]],
-            'loadOp': GPULoadOps[HEAPU32[colorAttachmentsIdx+4]],
-            'clearValue': [HEAPF64[colorAttachmentsIdxDbl  ], HEAPF64[colorAttachmentsIdxDbl+1],
-                           HEAPF64[colorAttachmentsIdxDbl+2], HEAPF64[colorAttachmentsIdxDbl+3]]
-          }]
-        }, 'GPUCommandEncoder.beginRenderPass() with desc')), 'returned'));
+      let desc = {
+        'colorAttachments': colorAttachments,
+        // Awkward polymorphism: cannot specify 'view': undefined if no depth-stencil attachment
+        // is to be present, but must pass undefined as the whole attachment object.
+        'depthStencilAttachment': wgpuReadRenderPassDepthStencilAttachment(descriptor+5),
+        'occlusionQuerySet': wgpu[HEAPU32[descriptor+14]], // 5 + 9==sizeof(WGpuRenderPassDepthStencilAttachment)
+        // If maxDrawCount is set to zero, pass in undefined to use the default value
+        // (likely 50 million, but omit it in case the spec might change in the future)
+        'maxDrawCount': maxDrawCount || void 0,
+        'timestampWrites': wgpuReadTimestampWrites(descriptor+15) // 14 + 1==sizeof(WGpuQuerySet) + 1
+      };
+      ;
+      return wgpuStore(wgpu[commandEncoder]['beginRenderPass'](desc));
     }
 
   function _wgpu_command_encoder_copy_buffer_to_buffer(commandEncoder, source, sourceOffset, destination, destinationOffset, size) {
@@ -15809,8 +15802,8 @@ var ASM_CONSTS = {
   var GPUTextureAspects = wgpuDecodeStrings('all stencilA depthA', '-only');
   function wgpuReadGpuImageCopyTexture(ptr) {
       assert(ptr, "assert(ptr) failed!");
-      assert(ptr % 4 == 0, "assert(ptr % 4 == 0) failed!");
-      ptr >>= 2
+      assert((ptr >> 2) << 2 == ptr);
+  ptr >>= 2;
       return {
         'texture': wgpu[HEAPU32[ptr]],
         'mipLevel': HEAP32[ptr+1],
@@ -15821,8 +15814,8 @@ var ASM_CONSTS = {
   
   function wgpuReadGpuImageCopyBuffer(ptr) {
       assert(ptr != 0, "assert(ptr != 0) failed!");
-      assert(ptr % 4 == 0, "assert(ptr % 4 == 0) failed!"); // Must be aligned at uint32_t boundary
-      ptr >>= 2
+      assert((ptr >> 2) << 2 == ptr);
+  ptr >>= 2;
       return {
         'offset': wgpuReadI53FromU64HeapIdx(ptr),
         'bytesPerRow': HEAP32[ptr+2],
@@ -15871,10 +15864,17 @@ var ASM_CONSTS = {
       wgpu[encoder]['dispatchWorkgroupsIndirect'](wgpu[indirectBuffer], indirectOffset);
     }
 
+  
   function wgpuStoreAndSetParent(object, parent) {
-      object = wgpuStore(object);
-      object && parent.derivedObjects.push(object);
-      return object;
+      if (object) {
+        var objectId = wgpuStore(object);
+        wgpuLinkParentAndChild(parent, objectId, object);
+        // No WebGPU resource such have more children than there are currently total
+        // number of WebGPU resources in existence. Because if that was the case,
+        // it would indicate a memory leak in handling the derivedObjects dictionary.
+        assert(Object.keys(parent.derivedObjects).length < Object.keys(wgpu).length, "assert(Object.keys(parent.derivedObjects).length < Object.keys(wgpu).length) failed!");
+        return objectId;
+      }
     }
   
   function _wgpu_device_create_bind_group(device, layout, entries, numEntries) {
@@ -15888,43 +15888,30 @@ var ASM_CONSTS = {
       assert(wgpu[layout] instanceof GPUBindGroupLayout, "assert(wgpu[layout] instanceof GPUBindGroupLayout) failed!");
       assert(numEntries >= 0, "assert(numEntries >= 0) failed!");
       assert(entries != 0 || numEntries == 0, "assert(entries != 0 || numEntries == 0) failed!"); // Must be non-null pointer
-      assert(entries % 4 == 0, "assert(entries % 4 == 0) failed!"); // Must be aligned at uint32_t boundary
       device = wgpu[device];
-      entries >>= 2
+      assert((entries >> 2) << 2 == entries);
+  entries >>= 2;
       let e = [];
       while(numEntries--) {
-        let bindingIdx = HEAPU32[entries],
-          resource = wgpu[HEAPU32[entries + 1]];
+        let resource = wgpu[HEAPU32[entries + 1]];
         assert(resource, "assert(resource) failed!");
-        let binding = {
-          'binding': bindingIdx,
-          'resource': resource
-        };
-        if (resource.isBuffer) {
-          let resourceBinding = {
+        e.push({
+          'binding': HEAPU32[entries],
+          'resource': resource.isBuffer ? {
             'buffer': resource,
             'offset': wgpuReadI53FromU64HeapIdx(entries + 2),
-          }, size = wgpuReadI53FromU64HeapIdx(entries + 4);
-          // Awkward polymorphism: cannot specify 'size' field if the whole buffer is to be bound.
-          if (size) resourceBinding['size'] = size;
-          binding['resource'] = resourceBinding;
-        };
-        e.push(binding);
+            'size': wgpuReadI53FromU64HeapIdx(entries + 4) || void 0 // Awkward polymorphism: convert size=0 to 'undefined' to mean to bind the whole buffer.
+          } : resource,
+        });
         entries += 6;
       }
   
-      return wgpuStoreAndSetParent(
-        device['createBindGroup'](
-          debugDir(
-            {
-              'layout': wgpu[layout],
-              'entries': e
-            },
-            'GPUDevice.createBindGroup() with desc'
-          )
-        ),
-        device
-      );
+      let desc = {
+        'layout': wgpu[layout],
+        'entries': e
+      };
+      ;
+      return wgpuStoreAndSetParent(device['createBindGroup'](desc), device);
     }
 
   
@@ -15942,9 +15929,9 @@ var ASM_CONSTS = {
   function wgpuReadBindGroupLayoutDescriptor(entries, numEntries) {
       assert(numEntries >= 0, "assert(numEntries >= 0) failed!");
       assert(entries != 0 || numEntries == 0, "assert(entries != 0 || numEntries == 0) failed!"); // Must be non-null pointer
-      assert(entries % 4 == 0, "assert(entries % 4 == 0) failed!"); // Must be aligned at uint32_t boundary
   
-      entries >>= 2
+      assert((entries >> 2) << 2 == entries);
+  entries >>= 2;
       let e = [];
       while(numEntries--) {
         let entry = {
@@ -15994,12 +15981,7 @@ var ASM_CONSTS = {
   
       let desc = wgpuReadBindGroupLayoutDescriptor(entries, numEntries);
       
-      
-      let bgl = device['createBindGroupLayout'](desc);
-      
-      
-  
-      return wgpuStoreAndSetParent(bgl, device);
+      return wgpuStoreAndSetParent(device['createBindGroupLayout'](desc), device);
     }
 
   
@@ -16009,20 +15991,18 @@ var ASM_CONSTS = {
       assert(wgpu[device], "assert(wgpu[device]) failed!");
       assert(wgpu[device] instanceof GPUDevice, "assert(wgpu[device] instanceof GPUDevice) failed!");
       assert(descriptor != 0, "assert(descriptor != 0) failed!");
-      assert(descriptor % 4 == 0, "assert(descriptor % 4 == 0) failed!"); // Must be aligned at uint32_t boundary
       device = wgpu[device];
-      descriptor >>= 2
+      assert((descriptor >> 2) << 2 == descriptor);
+  descriptor >>= 2;
   
-      let buffer = device['createBuffer'](
-        debugDir(
-          {
-            'size': wgpuReadI53FromU64HeapIdx(descriptor),
-            'usage': HEAPU32[descriptor+2],
-            'mappedAtCreation': !!HEAPU32[descriptor+3]
-          },
-          'GPUDevice.createBuffer() with desc'
-        )
-      );
+      let desc = {
+        'size': wgpuReadI53FromU64HeapIdx(descriptor),
+        'usage': HEAPU32[descriptor+2],
+        'mappedAtCreation': !!HEAPU32[descriptor+3]
+      };
+      ;
+      let buffer = device['createBuffer'](desc);
+  
       // Add tracking space for mapped ranges
       buffer.mappedRanges = {};
       // Mark this object to be of type GPUBuffer for wgpu_device_create_bind_group().
@@ -16037,15 +16017,9 @@ var ASM_CONSTS = {
       assert(wgpu[device] instanceof GPUDevice, "assert(wgpu[device] instanceof GPUDevice) failed!");
       assert(descriptor == 0 && "TODO: passing non-zero desciptor to wgpu_device_create_command_encoder() not yet implemented!", "assert(descriptor == 0 && 'TODO: passing non-zero desciptor to wgpu_device_create_command_encoder() not yet implemented!') failed!");
   
-      return wgpuStoreAndSetParent(
-        wgpu[device]['createCommandEncoder'](
-          debugDir(
-            void 0,
-            'GPUDevice.createCommandEncoder() with desc'
-          )
-        ),
-        wgpu[device]
-      );
+      let desc = void 0;
+      ;
+      return wgpuStoreAndSetParent(wgpu[device]['createCommandEncoder'](desc), wgpu[device]);
     }
 
   function _wgpu_device_create_command_encoder_simple(device) {
@@ -16056,18 +16030,17 @@ var ASM_CONSTS = {
   function wgpuReadConstants(constants, numConstants) {
       assert(numConstants >= 0, "assert(numConstants >= 0) failed!");
       assert(constants != 0 || numConstants == 0, "assert(constants != 0 || numConstants == 0) failed!");
-      assert(constants % 4 == 0, "assert(constants % 4 == 0) failed!");
   
       let c = {};
       while(numConstants--) {
-        c[UTF8ToString(HEAPU32[constants >> 2])] = HEAPF64[constants + 8 >> 3];
+        c[utf8(HEAPU32[constants  + 3 >> 2])] = 
+          HEAPF64[wgpu_checked_shift(constants + 8, 3)];
         constants += 16;
       }
       return c;
     }
   
   var GPUAutoLayoutMode = "auto";
-  
   function _wgpu_device_create_compute_pipeline(device, computeModule, entryPoint, layout, constants, numConstants) {
       
       assert(device != 0, "assert(device != 0) failed!");
@@ -16080,25 +16053,19 @@ var ASM_CONSTS = {
       assert(layout <= 1/*"auto"*/ || wgpu[layout] instanceof GPUPipelineLayout, "assert(layout <= 1/*'auto'*/ || wgpu[layout] instanceof GPUPipelineLayout) failed!");
       assert(numConstants >= 0, "assert(numConstants >= 0) failed!");
       assert(numConstants == 0 || constants, "assert(numConstants == 0 || constants) failed!");
-      assert(!entryPoint || UTF8ToString(entryPoint).length > 0, "assert(!entryPoint || UTF8ToString(entryPoint).length > 0) failed!"); // If entry point string is provided, it must be a nonempty JS string
+      assert(!entryPoint || utf8(entryPoint).length > 0, "assert(!entryPoint || utf8(entryPoint).length > 0) failed!"); // If entry point string is provided, it must be a nonempty JS string
       device = wgpu[device];
   
-      return wgpuStoreAndSetParent(
-        device['createComputePipeline'](
-          debugDir(
-            {
-              'layout': layout > 1 ? wgpu[layout] : GPUAutoLayoutMode,
-              'compute': {
-                'module': wgpu[computeModule],
-                'entryPoint': UTF8ToString(entryPoint) || void 0, // If null pointer was passed to use the default entry point name, then UTF8ToString() would return '', but spec requires undefined.
-                'constants': wgpuReadConstants(constants, numConstants)
-              }
-            },
-            'GPUDevice.createComputePipeline() with desc'
-          )
-        ),
-        device
-      );
+      let desc = {
+        'layout': layout > 1 ? wgpu[layout] : GPUAutoLayoutMode,
+        'compute': {
+          'module': wgpu[computeModule],
+          'entryPoint': utf8(entryPoint) || void 0, // If null pointer was passed to use the default entry point name, then utf8() would return '', but spec requires undefined.
+          'constants': wgpuReadConstants(constants, numConstants)
+        }
+      };
+      ;
+      return wgpuStoreAndSetParent(device['createComputePipeline'](desc), device);
     }
 
   
@@ -16109,17 +16076,11 @@ var ASM_CONSTS = {
       assert(wgpu[device] instanceof GPUDevice, "assert(wgpu[device] instanceof GPUDevice) failed!");
       device = wgpu[device];
   
-      return wgpuStoreAndSetParent(
-        device['createPipelineLayout'](
-          debugDir(
-            {
-              'bindGroupLayouts': wgpuReadArrayOfWgpuObjects(layouts, numLayouts)
-            },
-            'GPUDevice.createPipelineLayout() with desc'
-          )
-        ),
-        device
-      );
+      let desc = {
+        'bindGroupLayouts': wgpuReadArrayOfWgpuObjects(layouts, numLayouts)
+      };
+      ;
+      return wgpuStoreAndSetParent(device['createPipelineLayout'](desc), device);
     }
 
   var GPUCompareFunctions = wgpuDecodeStrings('neverA equalACB notCBCalways', '-equal |greater| less');
@@ -16137,7 +16098,7 @@ var ASM_CONSTS = {
   
   var GPUBlendOperations = wgpuDecodeStrings('add Areverse-Amin max', 'subtract ');
   
-  var GPUBlendFactors = wgpuDecodeStrings('zero one BEB BDEBD AEA ADEAD BD-saturated CEC', ' one-minus-|-alpha|constant|src|dst');
+  var GPUBlendFactors = wgpuDecodeStrings('zero one CFC CEFCE AFA AEFAE CE-saturated BFB DFD DEFDE', ' one-minus-|-alpha|src1|src|constant|dst');
   function wgpuReadGpuBlendComponent(idx) {
       assert(idx != 0, "assert(idx != 0) failed!");
       assert(GPUBlendOperations[HEAPU32[idx]], "assert(GPUBlendOperations[HEAPU32[idx]]) failed!");
@@ -16158,26 +16119,26 @@ var ASM_CONSTS = {
   
   var GPUPrimitiveTopologys = wgpuDecodeStrings('pointDADAB CDCB', '-list |triangle|-strip|line');
   
-  
   function wgpuReadRenderPipelineDescriptor(descriptor) {
       assert(descriptor != 0, "assert(descriptor != 0) failed!");
-      assert(descriptor % 4 == 0, "assert(descriptor % 4 == 0) failed!");
+      assert((descriptor >> 2) << 2 == descriptor);
+  descriptor >>= 2;
   
       let vertexBuffers = [],
           targets = [],
-          vertexIdx = descriptor >> 2,
-          numVertexBuffers = HEAP32[vertexIdx+2],
-          vertexBuffersIdx = HEAPU32[vertexIdx+3] >> 2,
-          primitiveIdx = vertexIdx + 6,
-          depthStencilIdx = primitiveIdx + 5,
-          multisampleIdx = depthStencilIdx + 17,
-          fragmentIdx = multisampleIdx + 3,
-          numTargets = HEAP32[fragmentIdx+2],
-          targetsIdx = HEAPU32[fragmentIdx+3] >> 2,
-          depthStencilFormat = HEAPU32[depthStencilIdx++],
+          vertexIdx = descriptor,
+          numVertexBuffers = HEAP32[vertexIdx+7], // +7 == WGpuVertexState.numBuffers
+          vertexBuffersIdx = wgpu_checked_shift(HEAPU32[vertexIdx+2], 2), // +2 == WGpuVertexState.buffers
+          primitiveIdx = vertexIdx + 10, // sizeof(WGpuVertexState)
+          depthStencilIdx = primitiveIdx + 5, // sizeof(WGpuPrimitiveState)
+          multisampleIdx = depthStencilIdx + 17, // sizeof(WGpuDepthStencilState)
+          fragmentIdx = multisampleIdx + 4, // sizeof(WGpuMultisampleState) + 1 for unused padding
+          numTargets = HEAP32[fragmentIdx+7], // +7 == WGpuFragmentState.numTargets
+          targetsIdx = wgpu_checked_shift(HEAPU32[fragmentIdx+2], 2), // +2 == WGpuFragmentState.targets
+          depthStencilFormat = HEAPU32[depthStencilIdx],
           multisampleCount = HEAPU32[multisampleIdx],
-          fragmentModule = HEAPU32[fragmentIdx],
-          pipelineLayoutId = HEAPU32[fragmentIdx+6],
+          fragmentModule = HEAPU32[fragmentIdx+6],
+          pipelineLayoutId = HEAPU32[fragmentIdx+10], // sizeof(WGpuFragmentState)
           desc;
   
       assert(pipelineLayoutId <= 1/*"auto"*/ || wgpu[pipelineLayoutId], "assert(pipelineLayoutId <= 1/*'auto'*/ || wgpu[pipelineLayoutId]) failed!");
@@ -16187,8 +16148,8 @@ var ASM_CONSTS = {
       assert(numVertexBuffers >= 0, "assert(numVertexBuffers >= 0) failed!");
       while(numVertexBuffers--) {
         let attributes = [],
-            numAttributes = HEAP32[vertexBuffersIdx],
-            attributesIdx = HEAPU32[vertexBuffersIdx+1] >> 2;
+            numAttributes = HEAP32[vertexBuffersIdx+2],
+            attributesIdx = wgpu_checked_shift(HEAPU32[vertexBuffersIdx], 2);
         assert(numAttributes >= 0, "assert(numAttributes >= 0) failed!");
         while(numAttributes--) {
           attributes.push({
@@ -16199,11 +16160,11 @@ var ASM_CONSTS = {
           attributesIdx += 4;
         }
         vertexBuffers.push({
-          'arrayStride': wgpuReadI53FromU64HeapIdx(vertexBuffersIdx+2),
-          'stepMode': [, 'vertex', 'instance'][HEAPU32[vertexBuffersIdx+4]],
+          'arrayStride': wgpuReadI53FromU64HeapIdx(vertexBuffersIdx+4),
+          'stepMode': [, 'vertex', 'instance'][HEAPU32[vertexBuffersIdx+3]],
           'attributes': attributes
         });
-        vertexBuffersIdx += 6;
+        vertexBuffersIdx += 6; // sizeof(WGpuVertexBufferLayout)
       }
   
       assert(numTargets >= 0, "assert(numTargets >= 0) failed!");
@@ -16223,11 +16184,19 @@ var ASM_CONSTS = {
   
       desc = {
         'vertex': {
-          'module': wgpu[HEAPU32[vertexIdx]],
-          'entryPoint': UTF8ToString(HEAPU32[vertexIdx+1]) || void 0, // If null pointer was passed to use the default entry point name, then UTF8ToString() would return '', but spec requires undefined.
+          'module': wgpu[HEAPU32[vertexIdx+6]],
+          // If null pointer was passed to use the default entry point name, then utf8() would return '', but spec requires undefined.
+          'entryPoint': utf8(HEAPU32[vertexIdx]) || void 0,
           'buffers': vertexBuffers,
-          'constants': wgpuReadConstants(HEAPU32[vertexIdx+5], HEAP32[vertexIdx+4])
+          'constants': wgpuReadConstants(HEAPU32[vertexIdx+4  >> 2], HEAP32[vertexIdx+8])
         },
+        'fragment': fragmentModule ? {
+          'module': wgpu[fragmentModule],
+          // If null pointer was passed to use the default entry point name, then utf8() would return '', but spec requires undefined.
+          'entryPoint': utf8(HEAPU32[fragmentIdx]) || void 0,
+          'targets': targets,
+          'constants': wgpuReadConstants(HEAPU32[fragmentIdx+4  >> 2], HEAP32[fragmentIdx+8])
+        } : void 0,
         'primitive': {
           'topology': GPUPrimitiveTopologys[HEAPU32[primitiveIdx]],
           'stripIndexFormat': GPUIndexFormats[HEAPU32[primitiveIdx+1]],
@@ -16235,41 +16204,26 @@ var ASM_CONSTS = {
           'cullMode': [, 'none', 'front', 'back'][HEAPU32[primitiveIdx+3]],
           'unclippedDepth': !!HEAPU32[primitiveIdx+4]
         },
-        'layout': pipelineLayoutId > 1 ? wgpu[pipelineLayoutId] : GPUAutoLayoutMode
-      };
-  
-      // Awkward polymorphism: we cannot statically write desc['depthStencil'] = null above.
-      // but Chrome will complain that null.format member does not exist.
-      if (depthStencilFormat) desc['depthStencil'] = {
+        'depthStencil': depthStencilFormat ? {
           'format': GPUTextureAndVertexFormats[depthStencilFormat],
-          'depthWriteEnabled': !!HEAPU32[depthStencilIdx++],
-          'depthCompare': GPUCompareFunctions[HEAPU32[depthStencilIdx++]],
-          'stencilReadMask': HEAPU32[depthStencilIdx++],
-          'stencilWriteMask': HEAPU32[depthStencilIdx++],
-          'depthBias': HEAP32[depthStencilIdx++],
-          'depthBiasSlopeScale': HEAPF32[depthStencilIdx++],
-          'depthBiasClamp': HEAPF32[depthStencilIdx++],
-          'stencilFront': wgpuReadGpuStencilFaceState(depthStencilIdx),
-          'stencilBack': wgpuReadGpuStencilFaceState(depthStencilIdx+4),
-          'clampDepth': !!HEAPU32[depthStencilIdx+8],
-        };
-  
-      // Awkward polymorphism: we cannot statically write desc['multisample'] with count=0,
-      // but must dynamically populate the multisample object only if doing MSAA.
-      if (multisampleCount) desc['multisample'] = {
+          'depthWriteEnabled': !!HEAPU32[depthStencilIdx+1],
+          'depthCompare': GPUCompareFunctions[HEAPU32[depthStencilIdx+2]],
+          'stencilReadMask': HEAPU32[depthStencilIdx+3],
+          'stencilWriteMask': HEAPU32[depthStencilIdx+4],
+          'depthBias': HEAP32[depthStencilIdx+5],
+          'depthBiasSlopeScale': HEAPF32[depthStencilIdx+6],
+          'depthBiasClamp': HEAPF32[depthStencilIdx+7],
+          'stencilFront': wgpuReadGpuStencilFaceState(depthStencilIdx+8),
+          'stencilBack': wgpuReadGpuStencilFaceState(depthStencilIdx+12),
+          'clampDepth': !!HEAPU32[depthStencilIdx+16],
+        } : void 0,
+        'multisample': multisampleCount ? {
           'count': multisampleCount,
           'mask': HEAPU32[multisampleIdx+1],
           'alphaToCoverageEnabled': !!HEAPU32[multisampleIdx+2]
-        };
-  
-      // Awkward polymorphism: we cannot statically write desc['fragment']['module'] = null,
-      // but must omit 'fragment' object altogether if no fragment module is to be used.
-      if (fragmentModule) desc['fragment'] = {
-          'module': wgpu[fragmentModule],
-          'entryPoint': UTF8ToString(HEAPU32[fragmentIdx+1]) || void 0, // If null pointer was passed to use the default entry point name, then UTF8ToString() would return '', but spec requires undefined.
-          'targets': targets,
-          'constants': wgpuReadConstants(HEAPU32[fragmentIdx+5], HEAP32[fragmentIdx+4])
-        };
+        } : void 0,
+        'layout': pipelineLayoutId > 1 ? wgpu[pipelineLayoutId] : GPUAutoLayoutMode
+      };
   
       return desc;
     }
@@ -16281,12 +16235,9 @@ var ASM_CONSTS = {
       assert(wgpu[device] instanceof GPUDevice, "assert(wgpu[device] instanceof GPUDevice) failed!");
       assert(descriptor, "assert(descriptor) failed!");
   
-      return wgpuStoreAndSetParent(
-        wgpu[device]['createRenderPipeline'](
-          debugDir(wgpuReadRenderPipelineDescriptor(descriptor), 'GPUDevice.createRenderPipeline() with desc')
-        ),
-        wgpu[device]
-      );
+      let desc = wgpuReadRenderPipelineDescriptor(descriptor);
+      ;
+      return wgpuStoreAndSetParent(wgpu[device]['createRenderPipeline'](desc), wgpu[device]);
     }
 
   
@@ -16301,10 +16252,10 @@ var ASM_CONSTS = {
       assert(device != 0, "assert(device != 0) failed!");
       assert(wgpu[device], "assert(wgpu[device]) failed!");
       assert(wgpu[device] instanceof GPUDevice, "assert(wgpu[device] instanceof GPUDevice) failed!");
-      assert(descriptor % 4 == 0, "assert(descriptor % 4 == 0) failed!"); // Must be aligned at uint32_t boundary
       device = wgpu[device];
   
-      descriptor >>= 2
+      assert((descriptor >> 2) << 2 == descriptor);
+  descriptor >>= 2;
       let desc = descriptor ? {
         'addressModeU': GPUAddressModes[HEAPU32[descriptor]],
         'addressModeV': GPUAddressModes[HEAPU32[descriptor+1]],
@@ -16318,47 +16269,40 @@ var ASM_CONSTS = {
         'maxAnisotropy': HEAPU32[descriptor+9]
       } : void 0;
       
-      
-      let sampler = device['createSampler'](desc);
-      
-      
   
-      return wgpuStoreAndSetParent(sampler, device);
+      return wgpuStoreAndSetParent(device['createSampler'](desc), device);
     }
 
   
-  
   function wgpuReadShaderModuleCompilationHints(index) {
-      let numHints = HEAP32[index],
+      let numHints = HEAP32[index+2],
         hints = [],
-        hintsIndex = HEAPU32[index+1] >> 2,
-        hint;
+        hintsIndex = wgpu_checked_shift(HEAPU32[index], 2),
+        layout;
       assert(numHints >= 0, "assert(numHints >= 0) failed!");
       while(numHints--) {
-        hint = HEAPU32[hintsIndex+1];
-        // hint == 0 (WGPU_AUTO_LAYOUT_MODE_NO_HINT) means no compilation hints are passed,
-        // hint == 1 (WGPU_AUTO_LAYOUT_MODE_AUTO) means { layout: 'auto' } hint will be passed.
-        // hint > 1: A handle to a given GPUPipelineLayout object is specified as a hint for creating the shader.
+        layout = HEAPU32[hintsIndex+2];
+        // layout == 0 (WGPU_AUTO_LAYOUT_MODE_NO_HINT) means no compilation hints are passed,
+        // layout == 1 (WGPU_AUTO_LAYOUT_MODE_AUTO) means { layout: 'auto' } hint will be passed.
+        // layout > 1: A handle to a given GPUPipelineLayout object is specified as a hint for creating the shader.
         // See https://github.com/gpuweb/gpuweb/pull/2876#issuecomment-1218341636
-        assert(hint <= 1 || wgpu[hint], "assert(hint <= 1 || wgpu[hint]) failed!");
-        assert(hint <= 1 || wgpu[hint] instanceof GPUPipelineLayout, "assert(hint <= 1 || wgpu[hint] instanceof GPUPipelineLayout) failed!");
+        assert(layout <= 1 || wgpu[layout], "assert(layout <= 1 || wgpu[layout]) failed!");
+        assert(layout <= 1 || wgpu[layout] instanceof GPUPipelineLayout, "assert(layout <= 1 || wgpu[layout] instanceof GPUPipelineLayout) failed!");
         hints.push({
-          'entryPoint': UTF8ToString(HEAPU32[hintsIndex]),
-          'layout': hint > 1 ? wgpu[hint] : (hint ? GPUAutoLayoutMode : null)
+          'entryPoint': utf8(HEAPU32[hintsIndex  >> 2]),
+          'layout': layout > 1 ? wgpu[layout] : (layout ? GPUAutoLayoutMode : null)
         });
-        hintsIndex += 2;
+        hintsIndex += 4;
       }
       return hints;
     }
-  
   function wgpuReadShaderModuleDescriptor(descriptor) {
       assert(descriptor != 0, "assert(descriptor != 0) failed!");
-      assert(descriptor % 4 == 0, "assert(descriptor % 4 == 0) failed!"); // Must be aligned at uint32_t boundary
-      descriptor = descriptor >> 2;
+      assert((descriptor >> 2) << 2 == descriptor);
+  descriptor >>= 2;
       return {
-        'code': UTF8ToString(HEAPU32[descriptor]),
-        // TODO: add support for 'sourceMap' field
-        'compilationHints': wgpuReadShaderModuleCompilationHints(descriptor+1)
+        'code': utf8(HEAPU32[descriptor]),
+        'compilationHints': wgpuReadShaderModuleCompilationHints(descriptor+2)
       }
     }
   function _wgpu_device_create_shader_module(device, descriptor) {
@@ -16366,12 +16310,10 @@ var ASM_CONSTS = {
       assert(device != 0, "assert(device != 0) failed!");
       assert(wgpu[device], "assert(wgpu[device]) failed!");
       assert(wgpu[device] instanceof GPUDevice, "assert(wgpu[device] instanceof GPUDevice) failed!");
-      return wgpuStoreAndSetParent(
-        wgpu[device]['createShaderModule'](
-          debugDir(wgpuReadShaderModuleDescriptor(descriptor), 'device.createShaderModule() with desc')
-        ),
-        wgpu[device]
-      );
+  
+      let desc = wgpuReadShaderModuleDescriptor(descriptor);
+      ;
+      return wgpuStoreAndSetParent(wgpu[device]['createShaderModule'](desc), wgpu[device]);
     }
 
   
@@ -16382,26 +16324,24 @@ var ASM_CONSTS = {
       assert(wgpu[device], "assert(wgpu[device]) failed!");
       assert(wgpu[device] instanceof GPUDevice, "assert(wgpu[device] instanceof GPUDevice) failed!");
       assert(descriptor != 0, "assert(descriptor != 0) failed!"); // Must be non-null
-      assert(descriptor % 4 == 0, "assert(descriptor % 4 == 0) failed!"); // Must be aligned at uint32_t boundary
       device = wgpu[device];
   
-      descriptor >>= 2
+      assert((descriptor >> 2) << 2 == descriptor);
+  descriptor >>= 2;
+      assert(HEAPU32[descriptor+8] >= 1, "assert(HEAPU32[descriptor+8] >= 1) failed!"); // 'dimension' must be one of 1d, 2d or 3d.
+      assert(HEAPU32[descriptor+8] <= 3, "assert(HEAPU32[descriptor+8] <= 3) failed!"); // 'dimension' must be one of 1d, 2d or 3d.
+  
       let desc = {
-        'size': [HEAP32[descriptor], HEAP32[descriptor+1], HEAP32[descriptor+2]],
-        'mipLevelCount': HEAP32[descriptor+3],
-        'sampleCount': HEAP32[descriptor+4],
-        'dimension': HEAPU32[descriptor+5] + 'd',
-        'format': GPUTextureAndVertexFormats[HEAPU32[descriptor+6]],
-        'usage': HEAPU32[descriptor+7],
-        'viewFormats': wgpuReadArrayOfWgpuObjects(HEAPU32[descriptor+9], HEAPU32[descriptor+8])
+        'viewFormats': wgpuReadArrayOfWgpuObjects(HEAPU32[descriptor ], HEAPU32[descriptor+2]),
+        'size': [HEAP32[descriptor+3], HEAP32[descriptor+4], HEAP32[descriptor+5]],
+        'mipLevelCount': HEAP32[descriptor+6],
+        'sampleCount': HEAP32[descriptor+7],
+        'dimension': HEAPU32[descriptor+8] + 'd',
+        'format': GPUTextureAndVertexFormats[HEAPU32[descriptor+9]],
+        'usage': HEAPU32[descriptor+10]
       };
       
-      
       let texture = device['createTexture'](desc);
-      
-      
-      // Textures get TextureViews derived from them.
-      texture.derivedObjects = [];
   
       return wgpuStoreAndSetParent(texture, device);
     }
@@ -16457,7 +16397,9 @@ var ASM_CONSTS = {
         _wgpuDispatchWebGpuErrorEvent(device, callback, error, userData);
       }
   
-      wgpu[device]['popErrorScope']().then(_wgpuMuteJsExceptions(dispatchErrorCallback)).catch(dispatchErrorCallback);
+      wgpu[device]['popErrorScope']()
+        .then(_wgpuMuteJsExceptions(dispatchErrorCallback))
+        .catch(dispatchErrorCallback);
     }
 
   function _wgpu_device_push_error_scope(device, filter) {
@@ -16504,8 +16446,6 @@ var ASM_CONSTS = {
   
       
       let cmdBuffer = wgpu[encoder]['finish']();
-      
-      
   
       /* https://gpuweb.github.io/gpuweb/#command-encoder-finalization:
         "A GPUCommandBuffer containing the commands recorded by the GPUCommandEncoder can be
@@ -16534,7 +16474,7 @@ var ASM_CONSTS = {
       assert(wgpu[encoder], "assert(wgpu[encoder]) failed!");
       assert(wgpu[encoder] instanceof GPUCommandEncoder || wgpu[encoder] instanceof GPUComputePassEncoder || wgpu[encoder] instanceof GPURenderPassEncoder || wgpu[encoder] instanceof GPURenderBundleEncoder, "assert(wgpu[encoder] instanceof GPUCommandEncoder || wgpu[encoder] instanceof GPUComputePassEncoder || wgpu[encoder] instanceof GPURenderPassEncoder || wgpu[encoder] instanceof GPURenderBundleEncoder) failed!");
       assert(groupLabel != 0, "assert(groupLabel != 0) failed!");
-      wgpu[encoder]['pushDebugGroup'](UTF8ToString(groupLabel));
+      wgpu[encoder]['pushDebugGroup'](utf8(groupLabel));
     }
 
   function _wgpu_encoder_set_bind_group(encoder, index, /*nullable*/ bindGroup, dynamicOffsets, numDynamicOffsets) {
@@ -16546,8 +16486,7 @@ var ASM_CONSTS = {
       assert(bindGroup == 0 || wgpu[bindGroup], "assert(bindGroup == 0 || wgpu[bindGroup]) failed!");
       assert(bindGroup == 0 || wgpu[bindGroup] instanceof GPUBindGroup, "assert(bindGroup == 0 || wgpu[bindGroup] instanceof GPUBindGroup) failed!");
       assert(dynamicOffsets != 0 || numDynamicOffsets == 0, "assert(dynamicOffsets != 0 || numDynamicOffsets == 0) failed!");
-      assert(dynamicOffsets % 4 == 0, "assert(dynamicOffsets % 4 == 0) failed!");
-      wgpu[encoder]['setBindGroup'](index, wgpu[bindGroup], HEAPU32, dynamicOffsets >> 2, numDynamicOffsets);
+      wgpu[encoder]['setBindGroup'](index, wgpu[bindGroup], HEAPU32, wgpu_checked_shift(dynamicOffsets, 2), numDynamicOffsets);
     }
 
   function _wgpu_encoder_set_pipeline(encoder, pipeline) {
@@ -16565,7 +16504,7 @@ var ASM_CONSTS = {
 
   function _wgpu_object_set_label(o, label) {
       assert(wgpu[o], "assert(wgpu[o]) failed!");
-      wgpu[o]['label'] = UTF8ToString(label);
+      wgpu[o]['label'] = utf8(label);
     }
 
   function _wgpu_pipeline_get_bind_group_layout(pipelineBase, index) {
@@ -16573,8 +16512,7 @@ var ASM_CONSTS = {
       assert(pipelineBase != 0, "assert(pipelineBase != 0) failed!");
       assert(wgpu[pipelineBase], "assert(wgpu[pipelineBase]) failed!");
       assert(wgpu[pipelineBase] instanceof GPURenderPipeline || wgpu[pipelineBase] instanceof GPUComputePipeline, "assert(wgpu[pipelineBase] instanceof GPURenderPipeline || wgpu[pipelineBase] instanceof GPUComputePipeline) failed!");
-  
-      return wgpuStore(debugDir(wgpu[pipelineBase]['getBindGroupLayout'](index), 'returned'));
+      return wgpuStore(wgpu[pipelineBase]['getBindGroupLayout'](index));
     }
 
   function _wgpu_queue_submit_multiple_and_destroy(queue, commandBuffers, numCommandBuffers) {
@@ -16584,9 +16522,9 @@ var ASM_CONSTS = {
       assert(wgpu[queue] instanceof GPUQueue, "assert(wgpu[queue] instanceof GPUQueue) failed!");
       wgpu[queue]['submit'](wgpuReadArrayOfWgpuObjects(commandBuffers, numCommandBuffers));
   
-      commandBuffers >>= 2
-      let end = commandBuffers + numCommandBuffers;
-      while(commandBuffers < end) _wgpu_object_destroy(HEAPU32[commandBuffers++]);
+      assert((commandBuffers >> 2) << 2 == commandBuffers);
+  commandBuffers >>= 2;
+      while(numCommandBuffers--) _wgpu_object_destroy(HEAPU32[commandBuffers++]);
     }
 
   function _wgpu_queue_submit_one_and_destroy(queue, commandBuffer) {
@@ -16674,9 +16612,7 @@ var ASM_CONSTS = {
       assert(Number.isSafeInteger(size), "assert(Number.isSafeInteger(size)) failed!");
       assert(size >= -1, "assert(size >= -1) failed!");
   
-      // Awkward API polymorphism: must omit size parameter altogether (instead of specifying e.g. -1 for whole buffer)
-      size < 0 ? wgpu[passEncoder]['setIndexBuffer'](wgpu[buffer], GPUIndexFormats[indexFormat], offset)
-        : wgpu[passEncoder]['setIndexBuffer'](wgpu[buffer], GPUIndexFormats[indexFormat], offset, size);
+      wgpu[passEncoder]['setIndexBuffer'](wgpu[buffer], GPUIndexFormats[indexFormat], offset, size < 0 ? void 0 : size);
     }
 
   function _wgpu_render_commands_mixin_set_vertex_buffer(passEncoder, slot, buffer, offset, size) {
@@ -16692,9 +16628,7 @@ var ASM_CONSTS = {
       assert(Number.isSafeInteger(size), "assert(Number.isSafeInteger(size)) failed!");
       assert(size >= -1, "assert(size >= -1) failed!");
   
-      // Awkward API polymorphism: must omit size parameter altogether (instead of specifying e.g. -1 for whole buffer)
-      size < 0 ? wgpu[passEncoder]['setVertexBuffer'](slot, wgpu[buffer], offset)
-        : wgpu[passEncoder]['setVertexBuffer'](slot, wgpu[buffer], offset, size);
+      wgpu[passEncoder]['setVertexBuffer'](slot, wgpu[buffer], offset, size < 0 ? void 0 : size);
     }
 
   function _wgpu_render_pass_encoder_set_scissor_rect(encoder, x, y, width, height) {
@@ -16729,26 +16663,22 @@ var ASM_CONSTS = {
       assert(texture != 0, "assert(texture != 0) failed!");
       assert(wgpu[texture], "assert(wgpu[texture]) failed!");
       assert(wgpu[texture] instanceof GPUTexture, "assert(wgpu[texture] instanceof GPUTexture) failed!");
-      assert(descriptor % 4 == 0, "assert(descriptor % 4 == 0) failed!"); // Must be aligned at uint32_t boundary
   
-      descriptor >>= 2
-      return wgpuStoreAndSetParent(
-        wgpu[texture]['createView'](
-          debugDir(
-            descriptor ? {
-              'format': GPUTextureAndVertexFormats[HEAPU32[descriptor]],
-              'dimension': GPUTextureViewDimensions[HEAPU32[descriptor+1]],
-              'aspect': GPUTextureAspects[HEAPU32[descriptor+2]],
-              'baseMipLevel': HEAP32[descriptor+3],
-              'mipLevelCount': HEAP32[descriptor+4],
-              'baseArrayLayer': HEAP32[descriptor+5],
-              'arrayLayerCount': HEAP32[descriptor+6],
-            } : void 0,
-            'GPUTexture.createView() with desc'
-          )
-        ),
-        wgpu[texture]
-      );
+      assert((descriptor >> 2) << 2 == descriptor);
+  descriptor >>= 2;
+  
+      let desc = descriptor ? {
+        'format': GPUTextureAndVertexFormats[HEAPU32[descriptor]],
+        'dimension': GPUTextureViewDimensions[HEAPU32[descriptor+1]],
+        'usage': HEAPU32[descriptor+2],
+        'aspect': GPUTextureAspects[HEAPU32[descriptor+3]],
+        'baseMipLevel': HEAP32[descriptor+4],
+        'mipLevelCount': HEAP32[descriptor+5],
+        'baseArrayLayer': HEAP32[descriptor+6],
+        'arrayLayerCount': HEAP32[descriptor+7],
+      } : void 0;
+      ;
+      return wgpuStoreAndSetParent(wgpu[texture]['createView'](desc), wgpu[texture]);
     }
 
   function _wgpu_texture_create_view_simple(texture) {
@@ -17098,7 +17028,6 @@ var wasmImports = {
   "JS_Sound_GetLoadState": _JS_Sound_GetLoadState,
   "JS_Sound_GetMetaData": _JS_Sound_GetMetaData,
   "JS_Sound_Init": _JS_Sound_Init,
-  "JS_Sound_IsStopped": _JS_Sound_IsStopped,
   "JS_Sound_Load": _JS_Sound_Load,
   "JS_Sound_Load_PCM": _JS_Sound_Load_PCM,
   "JS_Sound_Play": _JS_Sound_Play,
@@ -17132,6 +17061,7 @@ var wasmImports = {
   "JS_WebCamVideo_GrabFrame": _JS_WebCamVideo_GrabFrame,
   "JS_WebGPU_SetCommandEncoder": _JS_WebGPU_SetCommandEncoder,
   "JS_WebGPU_Setup": _JS_WebGPU_Setup,
+  "JS_WebPlayer_FinishInitialization": _JS_WebPlayer_FinishInitialization,
   "__assert_fail": ___assert_fail,
   "__cxa_begin_catch": ___cxa_begin_catch,
   "__cxa_end_catch": ___cxa_end_catch,
@@ -17532,7 +17462,6 @@ var wasmImports = {
   "wgpu_canvas_get_webgpu_context": _wgpu_canvas_get_webgpu_context,
   "wgpu_command_encoder_begin_compute_pass": _wgpu_command_encoder_begin_compute_pass,
   "wgpu_command_encoder_begin_render_pass": _wgpu_command_encoder_begin_render_pass,
-  "wgpu_command_encoder_begin_render_pass_1color_0depth": _wgpu_command_encoder_begin_render_pass_1color_0depth,
   "wgpu_command_encoder_copy_buffer_to_buffer": _wgpu_command_encoder_copy_buffer_to_buffer,
   "wgpu_command_encoder_copy_texture_to_buffer": _wgpu_command_encoder_copy_texture_to_buffer,
   "wgpu_command_encoder_copy_texture_to_texture": _wgpu_command_encoder_copy_texture_to_texture,
@@ -17686,11 +17615,11 @@ var dynCall_vi = Module["dynCall_vi"] = createExportWrapper("dynCall_vi");
 /** @type {function(...*):?} */
 var dynCall_viiii = Module["dynCall_viiii"] = createExportWrapper("dynCall_viiii");
 /** @type {function(...*):?} */
+var dynCall_viii = Module["dynCall_viii"] = createExportWrapper("dynCall_viii");
+/** @type {function(...*):?} */
 var dynCall_iiiii = Module["dynCall_iiiii"] = createExportWrapper("dynCall_iiiii");
 /** @type {function(...*):?} */
 var dynCall_iii = Module["dynCall_iii"] = createExportWrapper("dynCall_iii");
-/** @type {function(...*):?} */
-var dynCall_viii = Module["dynCall_viii"] = createExportWrapper("dynCall_viii");
 /** @type {function(...*):?} */
 var dynCall_i = Module["dynCall_i"] = createExportWrapper("dynCall_i");
 /** @type {function(...*):?} */
@@ -17740,95 +17669,55 @@ var dynCall_viijii = Module["dynCall_viijii"] = createExportWrapper("dynCall_vii
 /** @type {function(...*):?} */
 var dynCall_viiiii = Module["dynCall_viiiii"] = createExportWrapper("dynCall_viiiii");
 /** @type {function(...*):?} */
-var dynCall_iiiifii = Module["dynCall_iiiifii"] = createExportWrapper("dynCall_iiiifii");
-/** @type {function(...*):?} */
-var dynCall_iiiijii = Module["dynCall_iiiijii"] = createExportWrapper("dynCall_iiiijii");
-/** @type {function(...*):?} */
-var dynCall_vifi = Module["dynCall_vifi"] = createExportWrapper("dynCall_vifi");
-/** @type {function(...*):?} */
-var dynCall_viji = Module["dynCall_viji"] = createExportWrapper("dynCall_viji");
-/** @type {function(...*):?} */
-var dynCall_viiiiiiiiiiii = Module["dynCall_viiiiiiiiiiii"] = createExportWrapper("dynCall_viiiiiiiiiiii");
-/** @type {function(...*):?} */
-var dynCall_viiiiiiiiiiiii = Module["dynCall_viiiiiiiiiiiii"] = createExportWrapper("dynCall_viiiiiiiiiiiii");
-/** @type {function(...*):?} */
-var dynCall_viiiiiiiiiiiiii = Module["dynCall_viiiiiiiiiiiiii"] = createExportWrapper("dynCall_viiiiiiiiiiiiii");
-/** @type {function(...*):?} */
-var dynCall_viiiiiiiiiiiiiiii = Module["dynCall_viiiiiiiiiiiiiiii"] = createExportWrapper("dynCall_viiiiiiiiiiiiiiii");
-/** @type {function(...*):?} */
-var dynCall_viiiiiiiiiiiiiiiii = Module["dynCall_viiiiiiiiiiiiiiiii"] = createExportWrapper("dynCall_viiiiiiiiiiiiiiiii");
-/** @type {function(...*):?} */
-var dynCall_viiiiiiiiiiiiiiiiii = Module["dynCall_viiiiiiiiiiiiiiiiii"] = createExportWrapper("dynCall_viiiiiiiiiiiiiiiiii");
-/** @type {function(...*):?} */
-var dynCall_viifi = Module["dynCall_viifi"] = createExportWrapper("dynCall_viifi");
-/** @type {function(...*):?} */
-var dynCall_viiiiiiii = Module["dynCall_viiiiiiii"] = createExportWrapper("dynCall_viiiiiiii");
-/** @type {function(...*):?} */
-var dynCall_viiiiiiiii = Module["dynCall_viiiiiiiii"] = createExportWrapper("dynCall_viiiiiiiii");
-/** @type {function(...*):?} */
-var dynCall_viiiiiiiiiii = Module["dynCall_viiiiiiiiiii"] = createExportWrapper("dynCall_viiiiiiiiiii");
-/** @type {function(...*):?} */
-var dynCall_iji = Module["dynCall_iji"] = createExportWrapper("dynCall_iji");
-/** @type {function(...*):?} */
-var dynCall_ddiii = Module["dynCall_ddiii"] = createExportWrapper("dynCall_ddiii");
-/** @type {function(...*):?} */
 var dynCall_viiji = Module["dynCall_viiji"] = createExportWrapper("dynCall_viiji");
 /** @type {function(...*):?} */
 var dynCall_iiijii = Module["dynCall_iiijii"] = createExportWrapper("dynCall_iiijii");
 /** @type {function(...*):?} */
+var dynCall_viifi = Module["dynCall_viifi"] = createExportWrapper("dynCall_viifi");
+/** @type {function(...*):?} */
 var dynCall_iiifii = Module["dynCall_iiifii"] = createExportWrapper("dynCall_iiifii");
 /** @type {function(...*):?} */
-var dynCall_fii = Module["dynCall_fii"] = createExportWrapper("dynCall_fii");
+var dynCall_vijii = Module["dynCall_vijii"] = createExportWrapper("dynCall_vijii");
 /** @type {function(...*):?} */
-var dynCall_viiiifii = Module["dynCall_viiiifii"] = createExportWrapper("dynCall_viiiifii");
+var dynCall_iijiii = Module["dynCall_iijiii"] = createExportWrapper("dynCall_iijiii");
 /** @type {function(...*):?} */
-var dynCall_viiffi = Module["dynCall_viiffi"] = createExportWrapper("dynCall_viiffi");
+var dynCall_iiiijii = Module["dynCall_iiiijii"] = createExportWrapper("dynCall_iiiijii");
 /** @type {function(...*):?} */
-var dynCall_iiji = Module["dynCall_iiji"] = createExportWrapper("dynCall_iiji");
+var dynCall_iiiifii = Module["dynCall_iiiifii"] = createExportWrapper("dynCall_iiiifii");
 /** @type {function(...*):?} */
-var dynCall_jiii = Module["dynCall_jiii"] = createExportWrapper("dynCall_jiii");
+var dynCall_viji = Module["dynCall_viji"] = createExportWrapper("dynCall_viji");
 /** @type {function(...*):?} */
-var dynCall_ijji = Module["dynCall_ijji"] = createExportWrapper("dynCall_ijji");
+var dynCall_iiiidii = Module["dynCall_iiiidii"] = createExportWrapper("dynCall_iiiidii");
 /** @type {function(...*):?} */
-var dynCall_jjji = Module["dynCall_jjji"] = createExportWrapper("dynCall_jjji");
+var dynCall_vifi = Module["dynCall_vifi"] = createExportWrapper("dynCall_vifi");
+/** @type {function(...*):?} */
+var dynCall_vidi = Module["dynCall_vidi"] = createExportWrapper("dynCall_vidi");
+/** @type {function(...*):?} */
+var dynCall_iji = Module["dynCall_iji"] = createExportWrapper("dynCall_iji");
+/** @type {function(...*):?} */
+var dynCall_viiiji = Module["dynCall_viiiji"] = createExportWrapper("dynCall_viiiji");
+/** @type {function(...*):?} */
+var dynCall_jijii = Module["dynCall_jijii"] = createExportWrapper("dynCall_jijii");
 /** @type {function(...*):?} */
 var dynCall_ji = Module["dynCall_ji"] = createExportWrapper("dynCall_ji");
 /** @type {function(...*):?} */
+var dynCall_viiiiiiii = Module["dynCall_viiiiiiii"] = createExportWrapper("dynCall_viiiiiiii");
+/** @type {function(...*):?} */
 var dynCall_jdi = Module["dynCall_jdi"] = createExportWrapper("dynCall_jdi");
+/** @type {function(...*):?} */
+var dynCall_jjji = Module["dynCall_jjji"] = createExportWrapper("dynCall_jjji");
+/** @type {function(...*):?} */
+var dynCall_vijjji = Module["dynCall_vijjji"] = createExportWrapper("dynCall_vijjji");
+/** @type {function(...*):?} */
+var dynCall_iiiiiiiiii = Module["dynCall_iiiiiiiiii"] = createExportWrapper("dynCall_iiiiiiiiii");
 /** @type {function(...*):?} */
 var dynCall_dii = Module["dynCall_dii"] = createExportWrapper("dynCall_dii");
 /** @type {function(...*):?} */
 var dynCall_viijiiijiiii = Module["dynCall_viijiiijiiii"] = createExportWrapper("dynCall_viijiiijiiii");
 /** @type {function(...*):?} */
-var dynCall_ifi = Module["dynCall_ifi"] = createExportWrapper("dynCall_ifi");
+var dynCall_ijji = Module["dynCall_ijji"] = createExportWrapper("dynCall_ijji");
 /** @type {function(...*):?} */
-var dynCall_idi = Module["dynCall_idi"] = createExportWrapper("dynCall_idi");
-/** @type {function(...*):?} */
-var dynCall_vidi = Module["dynCall_vidi"] = createExportWrapper("dynCall_vidi");
-/** @type {function(...*):?} */
-var dynCall_fffi = Module["dynCall_fffi"] = createExportWrapper("dynCall_fffi");
-/** @type {function(...*):?} */
-var dynCall_jji = Module["dynCall_jji"] = createExportWrapper("dynCall_jji");
-/** @type {function(...*):?} */
-var dynCall_iidi = Module["dynCall_iidi"] = createExportWrapper("dynCall_iidi");
-/** @type {function(...*):?} */
-var dynCall_iifi = Module["dynCall_iifi"] = createExportWrapper("dynCall_iifi");
-/** @type {function(...*):?} */
-var dynCall_diiii = Module["dynCall_diiii"] = createExportWrapper("dynCall_diiii");
-/** @type {function(...*):?} */
-var dynCall_dddi = Module["dynCall_dddi"] = createExportWrapper("dynCall_dddi");
-/** @type {function(...*):?} */
-var dynCall_iiiidii = Module["dynCall_iiiidii"] = createExportWrapper("dynCall_iiiidii");
-/** @type {function(...*):?} */
-var dynCall_viifii = Module["dynCall_viifii"] = createExportWrapper("dynCall_viifii");
-/** @type {function(...*):?} */
-var dynCall_iiiifi = Module["dynCall_iiiifi"] = createExportWrapper("dynCall_iiiifi");
-/** @type {function(...*):?} */
-var dynCall_viiiji = Module["dynCall_viiiji"] = createExportWrapper("dynCall_viiiji");
-/** @type {function(...*):?} */
-var dynCall_vijjji = Module["dynCall_vijjji"] = createExportWrapper("dynCall_vijjji");
-/** @type {function(...*):?} */
-var dynCall_iiiiiiiiii = Module["dynCall_iiiiiiiiii"] = createExportWrapper("dynCall_iiiiiiiiii");
+var dynCall_viiiiiiiiiii = Module["dynCall_viiiiiiiiiii"] = createExportWrapper("dynCall_viiiiiiiiiii");
 /** @type {function(...*):?} */
 var dynCall_iijiiii = Module["dynCall_iijiiii"] = createExportWrapper("dynCall_iijiiii");
 /** @type {function(...*):?} */
@@ -17848,43 +17737,49 @@ var dynCall_iiiiiiiiiji = Module["dynCall_iiiiiiiiiji"] = createExportWrapper("d
 /** @type {function(...*):?} */
 var dynCall_vji = Module["dynCall_vji"] = createExportWrapper("dynCall_vji");
 /** @type {function(...*):?} */
-var dynCall_iiiiji = Module["dynCall_iiiiji"] = createExportWrapper("dynCall_iiiiji");
-/** @type {function(...*):?} */
-var dynCall_vijii = Module["dynCall_vijii"] = createExportWrapper("dynCall_vijii");
-/** @type {function(...*):?} */
-var dynCall_iijiii = Module["dynCall_iijiii"] = createExportWrapper("dynCall_iijiii");
-/** @type {function(...*):?} */
-var dynCall_viiififiii = Module["dynCall_viiififiii"] = createExportWrapper("dynCall_viiififiii");
-/** @type {function(...*):?} */
-var dynCall_fiiffi = Module["dynCall_fiiffi"] = createExportWrapper("dynCall_fiiffi");
-/** @type {function(...*):?} */
-var dynCall_viififiiii = Module["dynCall_viififiiii"] = createExportWrapper("dynCall_viififiiii");
-/** @type {function(...*):?} */
-var dynCall_vififiiii = Module["dynCall_vififiiii"] = createExportWrapper("dynCall_vififiiii");
-/** @type {function(...*):?} */
-var dynCall_fiffi = Module["dynCall_fiffi"] = createExportWrapper("dynCall_fiffi");
-/** @type {function(...*):?} */
-var dynCall_viiiiiifii = Module["dynCall_viiiiiifii"] = createExportWrapper("dynCall_viiiiiifii");
-/** @type {function(...*):?} */
-var dynCall_viidi = Module["dynCall_viidi"] = createExportWrapper("dynCall_viidi");
-/** @type {function(...*):?} */
-var dynCall_iijji = Module["dynCall_iijji"] = createExportWrapper("dynCall_iijji");
-/** @type {function(...*):?} */
-var dynCall_iiddi = Module["dynCall_iiddi"] = createExportWrapper("dynCall_iiddi");
-/** @type {function(...*):?} */
-var dynCall_iiffi = Module["dynCall_iiffi"] = createExportWrapper("dynCall_iiffi");
+var dynCall_viiiiiiiii = Module["dynCall_viiiiiiiii"] = createExportWrapper("dynCall_viiiiiiiii");
 /** @type {function(...*):?} */
 var dynCall_jjii = Module["dynCall_jjii"] = createExportWrapper("dynCall_jjii");
 /** @type {function(...*):?} */
-var dynCall_vifii = Module["dynCall_vifii"] = createExportWrapper("dynCall_vifii");
+var dynCall_fii = Module["dynCall_fii"] = createExportWrapper("dynCall_fii");
 /** @type {function(...*):?} */
-var dynCall_jijii = Module["dynCall_jijii"] = createExportWrapper("dynCall_jijii");
+var dynCall_ifi = Module["dynCall_ifi"] = createExportWrapper("dynCall_ifi");
+/** @type {function(...*):?} */
+var dynCall_idi = Module["dynCall_idi"] = createExportWrapper("dynCall_idi");
+/** @type {function(...*):?} */
+var dynCall_jiii = Module["dynCall_jiii"] = createExportWrapper("dynCall_jiii");
+/** @type {function(...*):?} */
+var dynCall_viiiifii = Module["dynCall_viiiifii"] = createExportWrapper("dynCall_viiiifii");
+/** @type {function(...*):?} */
+var dynCall_iiji = Module["dynCall_iiji"] = createExportWrapper("dynCall_iiji");
+/** @type {function(...*):?} */
+var dynCall_iiiiji = Module["dynCall_iiiiji"] = createExportWrapper("dynCall_iiiiji");
+/** @type {function(...*):?} */
+var dynCall_viiiiiiiiiiiii = Module["dynCall_viiiiiiiiiiiii"] = createExportWrapper("dynCall_viiiiiiiiiiiii");
+/** @type {function(...*):?} */
+var dynCall_fffi = Module["dynCall_fffi"] = createExportWrapper("dynCall_fffi");
+/** @type {function(...*):?} */
+var dynCall_jji = Module["dynCall_jji"] = createExportWrapper("dynCall_jji");
+/** @type {function(...*):?} */
+var dynCall_dddi = Module["dynCall_dddi"] = createExportWrapper("dynCall_dddi");
+/** @type {function(...*):?} */
+var dynCall_iidi = Module["dynCall_iidi"] = createExportWrapper("dynCall_iidi");
+/** @type {function(...*):?} */
+var dynCall_iifi = Module["dynCall_iifi"] = createExportWrapper("dynCall_iifi");
+/** @type {function(...*):?} */
+var dynCall_diiii = Module["dynCall_diiii"] = createExportWrapper("dynCall_diiii");
 /** @type {function(...*):?} */
 var dynCall_dji = Module["dynCall_dji"] = createExportWrapper("dynCall_dji");
 /** @type {function(...*):?} */
-var dynCall_viiiifi = Module["dynCall_viiiifi"] = createExportWrapper("dynCall_viiiifi");
+var dynCall_viiiiiiiiiiii = Module["dynCall_viiiiiiiiiiii"] = createExportWrapper("dynCall_viiiiiiiiiiii");
 /** @type {function(...*):?} */
-var dynCall_iiifi = Module["dynCall_iiifi"] = createExportWrapper("dynCall_iiifi");
+var dynCall_viiiiiiiiiiiiii = Module["dynCall_viiiiiiiiiiiiii"] = createExportWrapper("dynCall_viiiiiiiiiiiiii");
+/** @type {function(...*):?} */
+var dynCall_viiiiiiiiiiiiiiii = Module["dynCall_viiiiiiiiiiiiiiii"] = createExportWrapper("dynCall_viiiiiiiiiiiiiiii");
+/** @type {function(...*):?} */
+var dynCall_viiiiiiiiiiiiiiiii = Module["dynCall_viiiiiiiiiiiiiiiii"] = createExportWrapper("dynCall_viiiiiiiiiiiiiiiii");
+/** @type {function(...*):?} */
+var dynCall_viiiiiiiiiiiiiiiiii = Module["dynCall_viiiiiiiiiiiiiiiiii"] = createExportWrapper("dynCall_viiiiiiiiiiiiiiiiii");
 /** @type {function(...*):?} */
 var dynCall_viiiiiiiiiiiiiiiiiii = Module["dynCall_viiiiiiiiiiiiiiiiiii"] = createExportWrapper("dynCall_viiiiiiiiiiiiiiiiiii");
 /** @type {function(...*):?} */
@@ -17898,15 +17793,49 @@ var dynCall_jiiji = Module["dynCall_jiiji"] = createExportWrapper("dynCall_jiiji
 /** @type {function(...*):?} */
 var dynCall_fiifi = Module["dynCall_fiifi"] = createExportWrapper("dynCall_fiifi");
 /** @type {function(...*):?} */
+var dynCall_iiffi = Module["dynCall_iiffi"] = createExportWrapper("dynCall_iiffi");
+/** @type {function(...*):?} */
+var dynCall_iiiifi = Module["dynCall_iiiifi"] = createExportWrapper("dynCall_iiiifi");
+/** @type {function(...*):?} */
+var dynCall_viiiiiifii = Module["dynCall_viiiiiifii"] = createExportWrapper("dynCall_viiiiiifii");
+/** @type {function(...*):?} */
+var dynCall_viifii = Module["dynCall_viifii"] = createExportWrapper("dynCall_viifii");
+/** @type {function(...*):?} */
+var dynCall_viidi = Module["dynCall_viidi"] = createExportWrapper("dynCall_viidi");
+/** @type {function(...*):?} */
+var dynCall_vifii = Module["dynCall_vifii"] = createExportWrapper("dynCall_vifii");
+/** @type {function(...*):?} */
+var dynCall_ddiii = Module["dynCall_ddiii"] = createExportWrapper("dynCall_ddiii");
+/** @type {function(...*):?} */
+var dynCall_viiffi = Module["dynCall_viiffi"] = createExportWrapper("dynCall_viiffi");
+/** @type {function(...*):?} */
+var dynCall_viiiifi = Module["dynCall_viiiifi"] = createExportWrapper("dynCall_viiiifi");
+/** @type {function(...*):?} */
+var dynCall_viiififiii = Module["dynCall_viiififiii"] = createExportWrapper("dynCall_viiififiii");
+/** @type {function(...*):?} */
+var dynCall_fiiffi = Module["dynCall_fiiffi"] = createExportWrapper("dynCall_fiiffi");
+/** @type {function(...*):?} */
+var dynCall_viififiiii = Module["dynCall_viififiiii"] = createExportWrapper("dynCall_viififiiii");
+/** @type {function(...*):?} */
+var dynCall_vififiiii = Module["dynCall_vififiiii"] = createExportWrapper("dynCall_vififiiii");
+/** @type {function(...*):?} */
+var dynCall_fiffi = Module["dynCall_fiffi"] = createExportWrapper("dynCall_fiffi");
+/** @type {function(...*):?} */
+var dynCall_iiifi = Module["dynCall_iiifi"] = createExportWrapper("dynCall_iiifi");
+/** @type {function(...*):?} */
+var dynCall_iijji = Module["dynCall_iijji"] = createExportWrapper("dynCall_iijji");
+/** @type {function(...*):?} */
+var dynCall_iiddi = Module["dynCall_iiddi"] = createExportWrapper("dynCall_iiddi");
+/** @type {function(...*):?} */
 var dynCall_vijiii = Module["dynCall_vijiii"] = createExportWrapper("dynCall_vijiii");
 /** @type {function(...*):?} */
 var dynCall_vjjjiiii = Module["dynCall_vjjjiiii"] = createExportWrapper("dynCall_vjjjiiii");
 /** @type {function(...*):?} */
 var dynCall_vjiiiii = Module["dynCall_vjiiiii"] = createExportWrapper("dynCall_vjiiiii");
 /** @type {function(...*):?} */
-var dynCall_iijjii = Module["dynCall_iijjii"] = createExportWrapper("dynCall_iijjii");
-/** @type {function(...*):?} */
 var dynCall_jiiiii = Module["dynCall_jiiiii"] = createExportWrapper("dynCall_jiiiii");
+/** @type {function(...*):?} */
+var dynCall_iijjii = Module["dynCall_iijjii"] = createExportWrapper("dynCall_iijjii");
 /** @type {function(...*):?} */
 var dynCall_viiffifii = Module["dynCall_viiffifii"] = createExportWrapper("dynCall_viiffifii");
 /** @type {function(...*):?} */
@@ -18040,6 +17969,8 @@ var dynCall_iiifiii = Module["dynCall_iiifiii"] = createExportWrapper("dynCall_i
 /** @type {function(...*):?} */
 var dynCall_viiiiiffii = Module["dynCall_viiiiiffii"] = createExportWrapper("dynCall_viiiiiffii");
 /** @type {function(...*):?} */
+var dynCall_ifffi = Module["dynCall_ifffi"] = createExportWrapper("dynCall_ifffi");
+/** @type {function(...*):?} */
 var dynCall_viffffii = Module["dynCall_viffffii"] = createExportWrapper("dynCall_viffffii");
 /** @type {function(...*):?} */
 var dynCall_iiiifiii = Module["dynCall_iiiifiii"] = createExportWrapper("dynCall_iiiifiii");
@@ -18089,8 +18020,6 @@ var dynCall_jijji = Module["dynCall_jijji"] = createExportWrapper("dynCall_jijji
 var dynCall_viiffffi = Module["dynCall_viiffffi"] = createExportWrapper("dynCall_viiffffi");
 /** @type {function(...*):?} */
 var dynCall_fifffi = Module["dynCall_fifffi"] = createExportWrapper("dynCall_fifffi");
-/** @type {function(...*):?} */
-var dynCall_ifffi = Module["dynCall_ifffi"] = createExportWrapper("dynCall_ifffi");
 /** @type {function(...*):?} */
 var dynCall_fiifii = Module["dynCall_fiifii"] = createExportWrapper("dynCall_fiifii");
 /** @type {function(...*):?} */
@@ -18336,19 +18265,11 @@ var dynCall_vif = Module["dynCall_vif"] = createExportWrapper("dynCall_vif");
 /** @type {function(...*):?} */
 var dynCall_viif = Module["dynCall_viif"] = createExportWrapper("dynCall_viif");
 /** @type {function(...*):?} */
-var dynCall_viffff = Module["dynCall_viffff"] = createExportWrapper("dynCall_viffff");
-/** @type {function(...*):?} */
 var dynCall_ijj = Module["dynCall_ijj"] = createExportWrapper("dynCall_ijj");
 /** @type {function(...*):?} */
 var dynCall_vjji = Module["dynCall_vjji"] = createExportWrapper("dynCall_vjji");
 /** @type {function(...*):?} */
-var dynCall_vf = Module["dynCall_vf"] = createExportWrapper("dynCall_vf");
-/** @type {function(...*):?} */
-var dynCall_vffff = Module["dynCall_vffff"] = createExportWrapper("dynCall_vffff");
-/** @type {function(...*):?} */
-var dynCall_vff = Module["dynCall_vff"] = createExportWrapper("dynCall_vff");
-/** @type {function(...*):?} */
-var dynCall_iiij = Module["dynCall_iiij"] = createExportWrapper("dynCall_iiij");
+var dynCall_viiidd = Module["dynCall_viiidd"] = createExportWrapper("dynCall_viiidd");
 /** @type {function(...*):?} */
 var dynCall_viiiiiji = Module["dynCall_viiiiiji"] = createExportWrapper("dynCall_viiiiiji");
 /** @type {function(...*):?} */
@@ -18362,21 +18283,31 @@ var dynCall_viiff = Module["dynCall_viiff"] = createExportWrapper("dynCall_viiff
 /** @type {function(...*):?} */
 var dynCall_vifff = Module["dynCall_vifff"] = createExportWrapper("dynCall_vifff");
 /** @type {function(...*):?} */
+var dynCall_viffff = Module["dynCall_viffff"] = createExportWrapper("dynCall_viffff");
+/** @type {function(...*):?} */
 var dynCall_viifff = Module["dynCall_viifff"] = createExportWrapper("dynCall_viifff");
 /** @type {function(...*):?} */
 var dynCall_viff = Module["dynCall_viff"] = createExportWrapper("dynCall_viff");
 /** @type {function(...*):?} */
 var dynCall_vij = Module["dynCall_vij"] = createExportWrapper("dynCall_vij");
 /** @type {function(...*):?} */
-var dynCall_iiiijiii = Module["dynCall_iiiijiii"] = createExportWrapper("dynCall_iiiijiii");
+var dynCall_ij = Module["dynCall_ij"] = createExportWrapper("dynCall_ij");
 /** @type {function(...*):?} */
 var dynCall_iiiij = Module["dynCall_iiiij"] = createExportWrapper("dynCall_iiiij");
 /** @type {function(...*):?} */
-var dynCall_viiidd = Module["dynCall_viiidd"] = createExportWrapper("dynCall_viiidd");
+var dynCall_iiijj = Module["dynCall_iiijj"] = createExportWrapper("dynCall_iiijj");
 /** @type {function(...*):?} */
 var dynCall_vid = Module["dynCall_vid"] = createExportWrapper("dynCall_vid");
 /** @type {function(...*):?} */
-var dynCall_iiijj = Module["dynCall_iiijj"] = createExportWrapper("dynCall_iiijj");
+var dynCall_vffff = Module["dynCall_vffff"] = createExportWrapper("dynCall_vffff");
+/** @type {function(...*):?} */
+var dynCall_vfff = Module["dynCall_vfff"] = createExportWrapper("dynCall_vfff");
+/** @type {function(...*):?} */
+var dynCall_vf = Module["dynCall_vf"] = createExportWrapper("dynCall_vf");
+/** @type {function(...*):?} */
+var dynCall_vff = Module["dynCall_vff"] = createExportWrapper("dynCall_vff");
+/** @type {function(...*):?} */
+var dynCall_iiij = Module["dynCall_iiij"] = createExportWrapper("dynCall_iiij");
 /** @type {function(...*):?} */
 var dynCall_viiiif = Module["dynCall_viiiif"] = createExportWrapper("dynCall_viiiif");
 /** @type {function(...*):?} */
@@ -18464,9 +18395,7 @@ var dynCall_viififi = Module["dynCall_viififi"] = createExportWrapper("dynCall_v
 /** @type {function(...*):?} */
 var dynCall_iiiiiff = Module["dynCall_iiiiiff"] = createExportWrapper("dynCall_iiiiiff");
 /** @type {function(...*):?} */
-var dynCall_ij = Module["dynCall_ij"] = createExportWrapper("dynCall_ij");
-/** @type {function(...*):?} */
-var dynCall_vfff = Module["dynCall_vfff"] = createExportWrapper("dynCall_vfff");
+var dynCall_iiiijiii = Module["dynCall_iiiijiii"] = createExportWrapper("dynCall_iiiijiii");
 /** @type {function(...*):?} */
 var dynCall_f = Module["dynCall_f"] = createExportWrapper("dynCall_f");
 /** @type {function(...*):?} */
@@ -18742,10 +18671,21 @@ function invoke_viiiii(index,a1,a2,a3,a4,a5) {
   }
 }
 
-function invoke_iiiiiiiii(index,a1,a2,a3,a4,a5,a6,a7,a8) {
+function invoke_viifi(index,a1,a2,a3,a4) {
   var sp = stackSave();
   try {
-    return dynCall_iiiiiiiii(index,a1,a2,a3,a4,a5,a6,a7,a8);
+    dynCall_viifi(index,a1,a2,a3,a4);
+  } catch(e) {
+    stackRestore(sp);
+    if (!(e instanceof EmscriptenEH)) throw e;
+    _setThrew(1, 0);
+  }
+}
+
+function invoke_iiifii(index,a1,a2,a3,a4,a5) {
+  var sp = stackSave();
+  try {
+    return dynCall_iiifii(index,a1,a2,a3,a4,a5);
   } catch(e) {
     stackRestore(sp);
     if (!(e instanceof EmscriptenEH)) throw e;
@@ -18757,6 +18697,50 @@ function invoke_iiiifii(index,a1,a2,a3,a4,a5,a6) {
   var sp = stackSave();
   try {
     return dynCall_iiiifii(index,a1,a2,a3,a4,a5,a6);
+  } catch(e) {
+    stackRestore(sp);
+    if (!(e instanceof EmscriptenEH)) throw e;
+    _setThrew(1, 0);
+  }
+}
+
+function invoke_iiiidii(index,a1,a2,a3,a4,a5,a6) {
+  var sp = stackSave();
+  try {
+    return dynCall_iiiidii(index,a1,a2,a3,a4,a5,a6);
+  } catch(e) {
+    stackRestore(sp);
+    if (!(e instanceof EmscriptenEH)) throw e;
+    _setThrew(1, 0);
+  }
+}
+
+function invoke_vidi(index,a1,a2,a3) {
+  var sp = stackSave();
+  try {
+    dynCall_vidi(index,a1,a2,a3);
+  } catch(e) {
+    stackRestore(sp);
+    if (!(e instanceof EmscriptenEH)) throw e;
+    _setThrew(1, 0);
+  }
+}
+
+function invoke_vifi(index,a1,a2,a3) {
+  var sp = stackSave();
+  try {
+    dynCall_vifi(index,a1,a2,a3);
+  } catch(e) {
+    stackRestore(sp);
+    if (!(e instanceof EmscriptenEH)) throw e;
+    _setThrew(1, 0);
+  }
+}
+
+function invoke_fii(index,a1,a2) {
+  var sp = stackSave();
+  try {
+    return dynCall_fii(index,a1,a2);
   } catch(e) {
     stackRestore(sp);
     if (!(e instanceof EmscriptenEH)) throw e;
@@ -18797,153 +18781,10 @@ function invoke_viiiiiiii(index,a1,a2,a3,a4,a5,a6,a7,a8) {
   }
 }
 
-function invoke_ddiii(index,a1,a2,a3,a4) {
+function invoke_iiiiiiiii(index,a1,a2,a3,a4,a5,a6,a7,a8) {
   var sp = stackSave();
   try {
-    return dynCall_ddiii(index,a1,a2,a3,a4);
-  } catch(e) {
-    stackRestore(sp);
-    if (!(e instanceof EmscriptenEH)) throw e;
-    _setThrew(1, 0);
-  }
-}
-
-function invoke_viiff(index,a1,a2,a3,a4) {
-  var sp = stackSave();
-  try {
-    dynCall_viiff(index,a1,a2,a3,a4);
-  } catch(e) {
-    stackRestore(sp);
-    if (!(e instanceof EmscriptenEH)) throw e;
-    _setThrew(1, 0);
-  }
-}
-
-function invoke_viifi(index,a1,a2,a3,a4) {
-  var sp = stackSave();
-  try {
-    dynCall_viifi(index,a1,a2,a3,a4);
-  } catch(e) {
-    stackRestore(sp);
-    if (!(e instanceof EmscriptenEH)) throw e;
-    _setThrew(1, 0);
-  }
-}
-
-function invoke_iiifii(index,a1,a2,a3,a4,a5) {
-  var sp = stackSave();
-  try {
-    return dynCall_iiifii(index,a1,a2,a3,a4,a5);
-  } catch(e) {
-    stackRestore(sp);
-    if (!(e instanceof EmscriptenEH)) throw e;
-    _setThrew(1, 0);
-  }
-}
-
-function invoke_viiifi(index,a1,a2,a3,a4,a5) {
-  var sp = stackSave();
-  try {
-    dynCall_viiifi(index,a1,a2,a3,a4,a5);
-  } catch(e) {
-    stackRestore(sp);
-    if (!(e instanceof EmscriptenEH)) throw e;
-    _setThrew(1, 0);
-  }
-}
-
-function invoke_viifiii(index,a1,a2,a3,a4,a5,a6) {
-  var sp = stackSave();
-  try {
-    dynCall_viifiii(index,a1,a2,a3,a4,a5,a6);
-  } catch(e) {
-    stackRestore(sp);
-    if (!(e instanceof EmscriptenEH)) throw e;
-    _setThrew(1, 0);
-  }
-}
-
-function invoke_vifi(index,a1,a2,a3) {
-  var sp = stackSave();
-  try {
-    dynCall_vifi(index,a1,a2,a3);
-  } catch(e) {
-    stackRestore(sp);
-    if (!(e instanceof EmscriptenEH)) throw e;
-    _setThrew(1, 0);
-  }
-}
-
-function invoke_fii(index,a1,a2) {
-  var sp = stackSave();
-  try {
-    return dynCall_fii(index,a1,a2);
-  } catch(e) {
-    stackRestore(sp);
-    if (!(e instanceof EmscriptenEH)) throw e;
-    _setThrew(1, 0);
-  }
-}
-
-function invoke_fffi(index,a1,a2,a3) {
-  var sp = stackSave();
-  try {
-    return dynCall_fffi(index,a1,a2,a3);
-  } catch(e) {
-    stackRestore(sp);
-    if (!(e instanceof EmscriptenEH)) throw e;
-    _setThrew(1, 0);
-  }
-}
-
-function invoke_viifii(index,a1,a2,a3,a4,a5) {
-  var sp = stackSave();
-  try {
-    dynCall_viifii(index,a1,a2,a3,a4,a5);
-  } catch(e) {
-    stackRestore(sp);
-    if (!(e instanceof EmscriptenEH)) throw e;
-    _setThrew(1, 0);
-  }
-}
-
-function invoke_iiiiiiffiiiiiiiiiffffiii(index,a1,a2,a3,a4,a5,a6,a7,a8,a9,a10,a11,a12,a13,a14,a15,a16,a17,a18,a19,a20,a21,a22,a23) {
-  var sp = stackSave();
-  try {
-    return dynCall_iiiiiiffiiiiiiiiiffffiii(index,a1,a2,a3,a4,a5,a6,a7,a8,a9,a10,a11,a12,a13,a14,a15,a16,a17,a18,a19,a20,a21,a22,a23);
-  } catch(e) {
-    stackRestore(sp);
-    if (!(e instanceof EmscriptenEH)) throw e;
-    _setThrew(1, 0);
-  }
-}
-
-function invoke_fi(index,a1) {
-  var sp = stackSave();
-  try {
-    return dynCall_fi(index,a1);
-  } catch(e) {
-    stackRestore(sp);
-    if (!(e instanceof EmscriptenEH)) throw e;
-    _setThrew(1, 0);
-  }
-}
-
-function invoke_viiffi(index,a1,a2,a3,a4,a5) {
-  var sp = stackSave();
-  try {
-    dynCall_viiffi(index,a1,a2,a3,a4,a5);
-  } catch(e) {
-    stackRestore(sp);
-    if (!(e instanceof EmscriptenEH)) throw e;
-    _setThrew(1, 0);
-  }
-}
-
-function invoke_dii(index,a1,a2) {
-  var sp = stackSave();
-  try {
-    return dynCall_dii(index,a1,a2);
+    return dynCall_iiiiiiiii(index,a1,a2,a3,a4,a5,a6,a7,a8);
   } catch(e) {
     stackRestore(sp);
     if (!(e instanceof EmscriptenEH)) throw e;
@@ -18962,10 +18803,21 @@ function invoke_viiiiiiiii(index,a1,a2,a3,a4,a5,a6,a7,a8,a9) {
   }
 }
 
-function invoke_vidi(index,a1,a2,a3) {
+function invoke_iiiiiiiiii(index,a1,a2,a3,a4,a5,a6,a7,a8,a9) {
   var sp = stackSave();
   try {
-    dynCall_vidi(index,a1,a2,a3);
+    return dynCall_iiiiiiiiii(index,a1,a2,a3,a4,a5,a6,a7,a8,a9);
+  } catch(e) {
+    stackRestore(sp);
+    if (!(e instanceof EmscriptenEH)) throw e;
+    _setThrew(1, 0);
+  }
+}
+
+function invoke_dii(index,a1,a2) {
+  var sp = stackSave();
+  try {
+    return dynCall_dii(index,a1,a2);
   } catch(e) {
     stackRestore(sp);
     if (!(e instanceof EmscriptenEH)) throw e;
@@ -18995,10 +18847,10 @@ function invoke_idi(index,a1,a2) {
   }
 }
 
-function invoke_iidi(index,a1,a2,a3) {
+function invoke_iiiiiiffiiiiiiiiiffffiii(index,a1,a2,a3,a4,a5,a6,a7,a8,a9,a10,a11,a12,a13,a14,a15,a16,a17,a18,a19,a20,a21,a22,a23) {
   var sp = stackSave();
   try {
-    return dynCall_iidi(index,a1,a2,a3);
+    return dynCall_iiiiiiffiiiiiiiiiffffiii(index,a1,a2,a3,a4,a5,a6,a7,a8,a9,a10,a11,a12,a13,a14,a15,a16,a17,a18,a19,a20,a21,a22,a23);
   } catch(e) {
     stackRestore(sp);
     if (!(e instanceof EmscriptenEH)) throw e;
@@ -19006,10 +18858,10 @@ function invoke_iidi(index,a1,a2,a3) {
   }
 }
 
-function invoke_diiii(index,a1,a2,a3,a4) {
+function invoke_fi(index,a1) {
   var sp = stackSave();
   try {
-    return dynCall_diiii(index,a1,a2,a3,a4);
+    return dynCall_fi(index,a1);
   } catch(e) {
     stackRestore(sp);
     if (!(e instanceof EmscriptenEH)) throw e;
@@ -19017,32 +18869,10 @@ function invoke_diiii(index,a1,a2,a3,a4) {
   }
 }
 
-function invoke_dddi(index,a1,a2,a3) {
+function invoke_viifiii(index,a1,a2,a3,a4,a5,a6) {
   var sp = stackSave();
   try {
-    return dynCall_dddi(index,a1,a2,a3);
-  } catch(e) {
-    stackRestore(sp);
-    if (!(e instanceof EmscriptenEH)) throw e;
-    _setThrew(1, 0);
-  }
-}
-
-function invoke_iiiidii(index,a1,a2,a3,a4,a5,a6) {
-  var sp = stackSave();
-  try {
-    return dynCall_iiiidii(index,a1,a2,a3,a4,a5,a6);
-  } catch(e) {
-    stackRestore(sp);
-    if (!(e instanceof EmscriptenEH)) throw e;
-    _setThrew(1, 0);
-  }
-}
-
-function invoke_iiiiiiiiii(index,a1,a2,a3,a4,a5,a6,a7,a8,a9) {
-  var sp = stackSave();
-  try {
-    return dynCall_iiiiiiiiii(index,a1,a2,a3,a4,a5,a6,a7,a8,a9);
+    dynCall_viifiii(index,a1,a2,a3,a4,a5,a6);
   } catch(e) {
     stackRestore(sp);
     if (!(e instanceof EmscriptenEH)) throw e;
@@ -19072,10 +18902,153 @@ function invoke_viiiiiiiiiiiii(index,a1,a2,a3,a4,a5,a6,a7,a8,a9,a10,a11,a12,a13)
   }
 }
 
+function invoke_fffi(index,a1,a2,a3) {
+  var sp = stackSave();
+  try {
+    return dynCall_fffi(index,a1,a2,a3);
+  } catch(e) {
+    stackRestore(sp);
+    if (!(e instanceof EmscriptenEH)) throw e;
+    _setThrew(1, 0);
+  }
+}
+
+function invoke_dddi(index,a1,a2,a3) {
+  var sp = stackSave();
+  try {
+    return dynCall_dddi(index,a1,a2,a3);
+  } catch(e) {
+    stackRestore(sp);
+    if (!(e instanceof EmscriptenEH)) throw e;
+    _setThrew(1, 0);
+  }
+}
+
+function invoke_iidi(index,a1,a2,a3) {
+  var sp = stackSave();
+  try {
+    return dynCall_iidi(index,a1,a2,a3);
+  } catch(e) {
+    stackRestore(sp);
+    if (!(e instanceof EmscriptenEH)) throw e;
+    _setThrew(1, 0);
+  }
+}
+
+function invoke_diiii(index,a1,a2,a3,a4) {
+  var sp = stackSave();
+  try {
+    return dynCall_diiii(index,a1,a2,a3,a4);
+  } catch(e) {
+    stackRestore(sp);
+    if (!(e instanceof EmscriptenEH)) throw e;
+    _setThrew(1, 0);
+  }
+}
+
 function invoke_viffi(index,a1,a2,a3,a4) {
   var sp = stackSave();
   try {
     dynCall_viffi(index,a1,a2,a3,a4);
+  } catch(e) {
+    stackRestore(sp);
+    if (!(e instanceof EmscriptenEH)) throw e;
+    _setThrew(1, 0);
+  }
+}
+
+function invoke_viiiiiifii(index,a1,a2,a3,a4,a5,a6,a7,a8,a9) {
+  var sp = stackSave();
+  try {
+    dynCall_viiiiiifii(index,a1,a2,a3,a4,a5,a6,a7,a8,a9);
+  } catch(e) {
+    stackRestore(sp);
+    if (!(e instanceof EmscriptenEH)) throw e;
+    _setThrew(1, 0);
+  }
+}
+
+function invoke_viifii(index,a1,a2,a3,a4,a5) {
+  var sp = stackSave();
+  try {
+    dynCall_viifii(index,a1,a2,a3,a4,a5);
+  } catch(e) {
+    stackRestore(sp);
+    if (!(e instanceof EmscriptenEH)) throw e;
+    _setThrew(1, 0);
+  }
+}
+
+function invoke_viidi(index,a1,a2,a3,a4) {
+  var sp = stackSave();
+  try {
+    dynCall_viidi(index,a1,a2,a3,a4);
+  } catch(e) {
+    stackRestore(sp);
+    if (!(e instanceof EmscriptenEH)) throw e;
+    _setThrew(1, 0);
+  }
+}
+
+function invoke_vifii(index,a1,a2,a3,a4) {
+  var sp = stackSave();
+  try {
+    dynCall_vifii(index,a1,a2,a3,a4);
+  } catch(e) {
+    stackRestore(sp);
+    if (!(e instanceof EmscriptenEH)) throw e;
+    _setThrew(1, 0);
+  }
+}
+
+function invoke_ddiii(index,a1,a2,a3,a4) {
+  var sp = stackSave();
+  try {
+    return dynCall_ddiii(index,a1,a2,a3,a4);
+  } catch(e) {
+    stackRestore(sp);
+    if (!(e instanceof EmscriptenEH)) throw e;
+    _setThrew(1, 0);
+  }
+}
+
+function invoke_viiff(index,a1,a2,a3,a4) {
+  var sp = stackSave();
+  try {
+    dynCall_viiff(index,a1,a2,a3,a4);
+  } catch(e) {
+    stackRestore(sp);
+    if (!(e instanceof EmscriptenEH)) throw e;
+    _setThrew(1, 0);
+  }
+}
+
+function invoke_viiffi(index,a1,a2,a3,a4,a5) {
+  var sp = stackSave();
+  try {
+    dynCall_viiffi(index,a1,a2,a3,a4,a5);
+  } catch(e) {
+    stackRestore(sp);
+    if (!(e instanceof EmscriptenEH)) throw e;
+    _setThrew(1, 0);
+  }
+}
+
+function invoke_viiifi(index,a1,a2,a3,a4,a5) {
+  var sp = stackSave();
+  try {
+    dynCall_viiifi(index,a1,a2,a3,a4,a5);
+  } catch(e) {
+    stackRestore(sp);
+    if (!(e instanceof EmscriptenEH)) throw e;
+    _setThrew(1, 0);
+  }
+}
+
+function invoke_viiiifi(index,a1,a2,a3,a4,a5,a6) {
+  var sp = stackSave();
+  try {
+    dynCall_viiiifi(index,a1,a2,a3,a4,a5,a6);
   } catch(e) {
     stackRestore(sp);
     if (!(e instanceof EmscriptenEH)) throw e;
@@ -19120,50 +19093,6 @@ function invoke_fiiffi(index,a1,a2,a3,a4,a5) {
   var sp = stackSave();
   try {
     return dynCall_fiiffi(index,a1,a2,a3,a4,a5);
-  } catch(e) {
-    stackRestore(sp);
-    if (!(e instanceof EmscriptenEH)) throw e;
-    _setThrew(1, 0);
-  }
-}
-
-function invoke_viiiiiifii(index,a1,a2,a3,a4,a5,a6,a7,a8,a9) {
-  var sp = stackSave();
-  try {
-    dynCall_viiiiiifii(index,a1,a2,a3,a4,a5,a6,a7,a8,a9);
-  } catch(e) {
-    stackRestore(sp);
-    if (!(e instanceof EmscriptenEH)) throw e;
-    _setThrew(1, 0);
-  }
-}
-
-function invoke_viidi(index,a1,a2,a3,a4) {
-  var sp = stackSave();
-  try {
-    dynCall_viidi(index,a1,a2,a3,a4);
-  } catch(e) {
-    stackRestore(sp);
-    if (!(e instanceof EmscriptenEH)) throw e;
-    _setThrew(1, 0);
-  }
-}
-
-function invoke_vifii(index,a1,a2,a3,a4) {
-  var sp = stackSave();
-  try {
-    dynCall_vifii(index,a1,a2,a3,a4);
-  } catch(e) {
-    stackRestore(sp);
-    if (!(e instanceof EmscriptenEH)) throw e;
-    _setThrew(1, 0);
-  }
-}
-
-function invoke_viiiifi(index,a1,a2,a3,a4,a5,a6) {
-  var sp = stackSave();
-  try {
-    dynCall_viiiifi(index,a1,a2,a3,a4,a5,a6);
   } catch(e) {
     stackRestore(sp);
     if (!(e instanceof EmscriptenEH)) throw e;
@@ -19281,10 +19210,43 @@ function invoke_iji(index,a1,a2,a3) {
   }
 }
 
-function invoke_jjji(index,a1,a2,a3,a4,a5) {
+function invoke_viiji(index,a1,a2,a3,a4,a5) {
   var sp = stackSave();
   try {
-    return dynCall_jjji(index,a1,a2,a3,a4,a5);
+    dynCall_viiji(index,a1,a2,a3,a4,a5);
+  } catch(e) {
+    stackRestore(sp);
+    if (!(e instanceof EmscriptenEH)) throw e;
+    _setThrew(1, 0);
+  }
+}
+
+function invoke_iiijii(index,a1,a2,a3,a4,a5,a6) {
+  var sp = stackSave();
+  try {
+    return dynCall_iiijii(index,a1,a2,a3,a4,a5,a6);
+  } catch(e) {
+    stackRestore(sp);
+    if (!(e instanceof EmscriptenEH)) throw e;
+    _setThrew(1, 0);
+  }
+}
+
+function invoke_vijii(index,a1,a2,a3,a4,a5) {
+  var sp = stackSave();
+  try {
+    dynCall_vijii(index,a1,a2,a3,a4,a5);
+  } catch(e) {
+    stackRestore(sp);
+    if (!(e instanceof EmscriptenEH)) throw e;
+    _setThrew(1, 0);
+  }
+}
+
+function invoke_iijiii(index,a1,a2,a3,a4,a5,a6) {
+  var sp = stackSave();
+  try {
+    return dynCall_iijiii(index,a1,a2,a3,a4,a5,a6);
   } catch(e) {
     stackRestore(sp);
     if (!(e instanceof EmscriptenEH)) throw e;
@@ -19314,10 +19276,10 @@ function invoke_iiiijii(index,a1,a2,a3,a4,a5,a6,a7) {
   }
 }
 
-function invoke_vijii(index,a1,a2,a3,a4,a5) {
+function invoke_viji(index,a1,a2,a3,a4) {
   var sp = stackSave();
   try {
-    dynCall_vijii(index,a1,a2,a3,a4,a5);
+    dynCall_viji(index,a1,a2,a3,a4);
   } catch(e) {
     stackRestore(sp);
     if (!(e instanceof EmscriptenEH)) throw e;
@@ -19325,10 +19287,21 @@ function invoke_vijii(index,a1,a2,a3,a4,a5) {
   }
 }
 
-function invoke_iijiii(index,a1,a2,a3,a4,a5,a6) {
+function invoke_jijii(index,a1,a2,a3,a4,a5) {
   var sp = stackSave();
   try {
-    return dynCall_iijiii(index,a1,a2,a3,a4,a5,a6);
+    return dynCall_jijii(index,a1,a2,a3,a4,a5);
+  } catch(e) {
+    stackRestore(sp);
+    if (!(e instanceof EmscriptenEH)) throw e;
+    _setThrew(1, 0);
+  }
+}
+
+function invoke_viiiji(index,a1,a2,a3,a4,a5,a6) {
+  var sp = stackSave();
+  try {
+    dynCall_viiiji(index,a1,a2,a3,a4,a5,a6);
   } catch(e) {
     stackRestore(sp);
     if (!(e instanceof EmscriptenEH)) throw e;
@@ -19380,87 +19353,32 @@ function invoke_iijiiiiii(index,a1,a2,a3,a4,a5,a6,a7,a8,a9) {
   }
 }
 
-function invoke_viiji(index,a1,a2,a3,a4,a5) {
-  var sp = stackSave();
-  try {
-    dynCall_viiji(index,a1,a2,a3,a4,a5);
-  } catch(e) {
-    stackRestore(sp);
-    if (!(e instanceof EmscriptenEH)) throw e;
-    _setThrew(1, 0);
-  }
-}
-
-function invoke_iiijii(index,a1,a2,a3,a4,a5,a6) {
-  var sp = stackSave();
-  try {
-    return dynCall_iiijii(index,a1,a2,a3,a4,a5,a6);
-  } catch(e) {
-    stackRestore(sp);
-    if (!(e instanceof EmscriptenEH)) throw e;
-    _setThrew(1, 0);
-  }
-}
-
-function invoke_viji(index,a1,a2,a3,a4) {
-  var sp = stackSave();
-  try {
-    dynCall_viji(index,a1,a2,a3,a4);
-  } catch(e) {
-    stackRestore(sp);
-    if (!(e instanceof EmscriptenEH)) throw e;
-    _setThrew(1, 0);
-  }
-}
-
-function invoke_iiji(index,a1,a2,a3,a4) {
-  var sp = stackSave();
-  try {
-    return dynCall_iiji(index,a1,a2,a3,a4);
-  } catch(e) {
-    stackRestore(sp);
-    if (!(e instanceof EmscriptenEH)) throw e;
-    _setThrew(1, 0);
-  }
-}
-
-function invoke_jijii(index,a1,a2,a3,a4,a5) {
-  var sp = stackSave();
-  try {
-    return dynCall_jijii(index,a1,a2,a3,a4,a5);
-  } catch(e) {
-    stackRestore(sp);
-    if (!(e instanceof EmscriptenEH)) throw e;
-    _setThrew(1, 0);
-  }
-}
-
-function invoke_jiiiiiiiiii(index,a1,a2,a3,a4,a5,a6,a7,a8,a9,a10) {
-  var sp = stackSave();
-  try {
-    return dynCall_jiiiiiiiiii(index,a1,a2,a3,a4,a5,a6,a7,a8,a9,a10);
-  } catch(e) {
-    stackRestore(sp);
-    if (!(e instanceof EmscriptenEH)) throw e;
-    _setThrew(1, 0);
-  }
-}
-
-function invoke_ijji(index,a1,a2,a3,a4,a5) {
-  var sp = stackSave();
-  try {
-    return dynCall_ijji(index,a1,a2,a3,a4,a5);
-  } catch(e) {
-    stackRestore(sp);
-    if (!(e instanceof EmscriptenEH)) throw e;
-    _setThrew(1, 0);
-  }
-}
-
 function invoke_jdi(index,a1,a2) {
   var sp = stackSave();
   try {
     return dynCall_jdi(index,a1,a2);
+  } catch(e) {
+    stackRestore(sp);
+    if (!(e instanceof EmscriptenEH)) throw e;
+    _setThrew(1, 0);
+  }
+}
+
+function invoke_jjji(index,a1,a2,a3,a4,a5) {
+  var sp = stackSave();
+  try {
+    return dynCall_jjji(index,a1,a2,a3,a4,a5);
+  } catch(e) {
+    stackRestore(sp);
+    if (!(e instanceof EmscriptenEH)) throw e;
+    _setThrew(1, 0);
+  }
+}
+
+function invoke_vijjji(index,a1,a2,a3,a4,a5,a6,a7,a8) {
+  var sp = stackSave();
+  try {
+    dynCall_vijjji(index,a1,a2,a3,a4,a5,a6,a7,a8);
   } catch(e) {
     stackRestore(sp);
     if (!(e instanceof EmscriptenEH)) throw e;
@@ -19479,32 +19397,10 @@ function invoke_viijiiijiiii(index,a1,a2,a3,a4,a5,a6,a7,a8,a9,a10,a11,a12,a13) {
   }
 }
 
-function invoke_jji(index,a1,a2,a3) {
+function invoke_ijji(index,a1,a2,a3,a4,a5) {
   var sp = stackSave();
   try {
-    return dynCall_jji(index,a1,a2,a3);
-  } catch(e) {
-    stackRestore(sp);
-    if (!(e instanceof EmscriptenEH)) throw e;
-    _setThrew(1, 0);
-  }
-}
-
-function invoke_viiiji(index,a1,a2,a3,a4,a5,a6) {
-  var sp = stackSave();
-  try {
-    dynCall_viiiji(index,a1,a2,a3,a4,a5,a6);
-  } catch(e) {
-    stackRestore(sp);
-    if (!(e instanceof EmscriptenEH)) throw e;
-    _setThrew(1, 0);
-  }
-}
-
-function invoke_vijjji(index,a1,a2,a3,a4,a5,a6,a7,a8) {
-  var sp = stackSave();
-  try {
-    dynCall_vijjji(index,a1,a2,a3,a4,a5,a6,a7,a8);
+    return dynCall_ijji(index,a1,a2,a3,a4,a5);
   } catch(e) {
     stackRestore(sp);
     if (!(e instanceof EmscriptenEH)) throw e;
@@ -19545,10 +19441,65 @@ function invoke_jjii(index,a1,a2,a3,a4) {
   }
 }
 
+function invoke_iiji(index,a1,a2,a3,a4) {
+  var sp = stackSave();
+  try {
+    return dynCall_iiji(index,a1,a2,a3,a4);
+  } catch(e) {
+    stackRestore(sp);
+    if (!(e instanceof EmscriptenEH)) throw e;
+    _setThrew(1, 0);
+  }
+}
+
+function invoke_jji(index,a1,a2,a3) {
+  var sp = stackSave();
+  try {
+    return dynCall_jji(index,a1,a2,a3);
+  } catch(e) {
+    stackRestore(sp);
+    if (!(e instanceof EmscriptenEH)) throw e;
+    _setThrew(1, 0);
+  }
+}
+
 function invoke_dji(index,a1,a2,a3) {
   var sp = stackSave();
   try {
     return dynCall_dji(index,a1,a2,a3);
+  } catch(e) {
+    stackRestore(sp);
+    if (!(e instanceof EmscriptenEH)) throw e;
+    _setThrew(1, 0);
+  }
+}
+
+function invoke_jiiiiiiiiii(index,a1,a2,a3,a4,a5,a6,a7,a8,a9,a10) {
+  var sp = stackSave();
+  try {
+    return dynCall_jiiiiiiiiii(index,a1,a2,a3,a4,a5,a6,a7,a8,a9,a10);
+  } catch(e) {
+    stackRestore(sp);
+    if (!(e instanceof EmscriptenEH)) throw e;
+    _setThrew(1, 0);
+  }
+}
+
+function invoke_jiji(index,a1,a2,a3,a4) {
+  var sp = stackSave();
+  try {
+    return dynCall_jiji(index,a1,a2,a3,a4);
+  } catch(e) {
+    stackRestore(sp);
+    if (!(e instanceof EmscriptenEH)) throw e;
+    _setThrew(1, 0);
+  }
+}
+
+function invoke_iijji(index,a1,a2,a3,a4,a5,a6) {
+  var sp = stackSave();
+  try {
+    return dynCall_iijji(index,a1,a2,a3,a4,a5,a6);
   } catch(e) {
     stackRestore(sp);
     if (!(e instanceof EmscriptenEH)) throw e;
@@ -19589,21 +19540,10 @@ function invoke_vjiiiii(index,a1,a2,a3,a4,a5,a6,a7) {
   }
 }
 
-function invoke_jiji(index,a1,a2,a3,a4) {
+function invoke_jiiiii(index,a1,a2,a3,a4,a5) {
   var sp = stackSave();
   try {
-    return dynCall_jiji(index,a1,a2,a3,a4);
-  } catch(e) {
-    stackRestore(sp);
-    if (!(e instanceof EmscriptenEH)) throw e;
-    _setThrew(1, 0);
-  }
-}
-
-function invoke_iijji(index,a1,a2,a3,a4,a5,a6) {
-  var sp = stackSave();
-  try {
-    return dynCall_iijji(index,a1,a2,a3,a4,a5,a6);
+    return dynCall_jiiiii(index,a1,a2,a3,a4,a5);
   } catch(e) {
     stackRestore(sp);
     if (!(e instanceof EmscriptenEH)) throw e;
@@ -19615,17 +19555,6 @@ function invoke_iijjii(index,a1,a2,a3,a4,a5,a6,a7) {
   var sp = stackSave();
   try {
     return dynCall_iijjii(index,a1,a2,a3,a4,a5,a6,a7);
-  } catch(e) {
-    stackRestore(sp);
-    if (!(e instanceof EmscriptenEH)) throw e;
-    _setThrew(1, 0);
-  }
-}
-
-function invoke_jiiiii(index,a1,a2,a3,a4,a5) {
-  var sp = stackSave();
-  try {
-    return dynCall_jiiiii(index,a1,a2,a3,a4,a5);
   } catch(e) {
     stackRestore(sp);
     if (!(e instanceof EmscriptenEH)) throw e;
@@ -19965,15 +19894,17 @@ var unexportedSymbols = [
   'jsAudioCreateChannel',
   'jsDomCssEscapeId',
   'jsCanvasSelector',
-  'debugDir',
   'wgpu',
+  'wgpuOffscreenCanvases',
   'wgpuIdCounter',
   'wgpuStore',
+  'wgpuLinkParentAndChild',
   'wgpuStoreAndSetParent',
   'wgpuReadArrayOfWgpuObjects',
   'wgpuReadI53FromU64HeapIdx',
   'wgpuWriteI53ToU64HeapIdx',
-  'replaceAll_polyfill',
+  'wgpu_checked_shift',
+  'utf8',
   'wgpuDecodeStrings',
   'GPUTextureAndVertexFormats',
   'GPUBlendFactors',
@@ -19999,6 +19930,10 @@ var unexportedSymbols = [
   'GPULoadOps',
   'GPUStoreOps',
   'GPUAutoLayoutMode',
+  'wgpuReadSupportedLimits',
+  'wgpuReadQueueDescriptor',
+  'wgpuReadFeaturesBitfield',
+  'wgpuReadDeviceDescriptor',
   'wgpuReadShaderModuleCompilationHints',
   'wgpuReadShaderModuleDescriptor',
   'wgpuReadGpuStencilFaceState',
@@ -20007,6 +19942,7 @@ var unexportedSymbols = [
   'wgpuReadBindGroupLayoutDescriptor',
   'wgpuReadConstants',
   'wgpuReadTimestampWrites',
+  'wgpuReadRenderPassDepthStencilAttachment',
   'wgpuReadGpuImageCopyBuffer',
   'wgpuReadGpuImageCopyTexture',
   'orientationEventHandler',

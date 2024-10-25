@@ -54,7 +54,7 @@ function createUnityInstance(canvas, config, onProgress) {
       preserveDrawingBuffer: false,
       powerPreference: 2,
     },
-    wasmFileSize: 73701708,
+    wasmFileSize: 74243037,
     cacheControl: function (url) {
       return (url == Module.dataUrl || url.match(/\.bundle/)) ? "must-revalidate" : "no-store";
     },
@@ -1419,9 +1419,11 @@ Module.UnityCache = function () {
       onProgress(0);
       Module.postRun.push(function () {
         onProgress(1);
-        delete Module.startupErrorHandler;
-        resolve(unityInstance);
-        Module.pageStartupTime = performance.now();
+        Module.WebPlayer.WaitForInitialization().then(function () {
+          delete Module.startupErrorHandler;
+          resolve(unityInstance);
+          Module.pageStartupTime = performance.now();
+        });
       });
       // Checking for WebGPU availability is asynchronous, so wait until
       // it has finished checking before loading the build.
