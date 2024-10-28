@@ -46,9 +46,12 @@
     <div id="unity-container">
       <canvas id="unity-canvas" width="960" height="600" tabindex="-1"></canvas>
       <div id="unity-loading-bar">
-        <img id="logo" src="TemplateData/Tri-Arrow_Logo.png" alt="Tri-Arrow Logo">
+        <img id="logo" src="TemplateData/Tri-Arrow_Logo_black.png" alt="Tri-Arrow Logo">
         <div id="unity-progress-bar-empty">
-          <div id="unity-progress-bar-full"></div>
+          <div id="unity-progress-bar-full">
+            <img id="boat-icon" src="TemplateData/icon_loading_wakachiku.png" alt="Boat Icon">
+          </div>
+          
         </div>
       </div>
       <div id="unity-warning"> </div>
@@ -113,7 +116,10 @@
         script.src = loaderUrl;
         script.onload = () => {
           createUnityInstance(canvas, config, (progress) => {
-            progressBarFull.style.width = 100 * progress + "%";
+            const maxProgressWidth = 100 * progress;
+            progressBarFull.style.width = maxProgressWidth + "%";
+            const boatPosition = Math.min(80, Math.max(20, 100 * progress - 20));
+            document.getElementById("boat-icon").style.left = boatPosition + "%";
           }).then((unityInstance) => {
             loadingBar.style.display = "none";
 
