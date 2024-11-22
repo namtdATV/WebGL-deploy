@@ -22,24 +22,6 @@
         display: block;
         background: #231F20;
       }
-
-      #fullscreen-button {
-        position: absolute;
-        bottom: 20px;
-        right: 20px;
-        padding: 10px 20px;
-        background-color: #007bff;
-        color: white;
-        border: none;
-        cursor: pointer;
-        z-index: 20;
-        font-size: 16px;
-        border-radius: 5px;
-      }
-
-      #fullscreen-button:hover {
-        background-color: #0056b3;
-      }
     </style>
   </head>
   <body>
@@ -51,14 +33,11 @@
           <div id="unity-progress-bar-full">
             <img id="boat-icon" src="TemplateData/icon_loading_wakachiku.png" alt="Boat Icon">
           </div>
-          
         </div>
+        <p id="loading-text">Now Loading...</p>
       </div>
       <div id="unity-warning"> </div>
     </div>
-
-    <button id="fullscreen-button">Go Fullscreen</button>
-
     <script>
       window.addEventListener("load", function () {
         if ("serviceWorker" in navigator) {
@@ -128,19 +107,6 @@
           });
         };
         document.body.appendChild(script);
-      });
-
-      // Fullscreen button functionality
-      var fullscreenButton = document.querySelector("#fullscreen-button");
-      fullscreenButton.addEventListener('click', function() {
-        var canvas = document.querySelector("#unity-canvas");
-        if (!document.fullscreenElement) {
-          canvas.requestFullscreen().catch((err) => {
-            alert(`Error attempting to enable fullscreen mode: ${err.message} (${err.name})`);
-          });
-        } else {
-          document.exitFullscreen();
-        }
       });
     </script>
   </body>
