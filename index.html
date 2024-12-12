@@ -1,135 +1,127 @@
-﻿<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>[TEST]浚渫船シミュレーター</title>
-    <style>
-        body {
-            font-family: Arial, sans-serif;
-            margin: 0;
-            padding: 0;
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-        }
-        header {
-            background-color: #282c34;
-            color: white;
-            width: 100%;
-            padding: 20px;
-            text-align: center;
-        }
-        #folder-list {
-            margin: 20px 0;
-            display: flex;
-            flex-direction: column; /* Align buttons vertically */
-            gap: 15px;
-            align-items: center;
-        }
-        .folder {
-            padding: 20px 40px; /* Increase padding to make the button larger */
-            font-size: 20px; /* Increase font size for bigger text */
-            background-color: #61dafb;
-            color: white;
-            border: none;
-            border-radius: 10px;
-            cursor: pointer;
-            transition: background-color 0.2s;
-            width: auto;
-            min-width: 200px; /* Optional: ensure buttons have a minimum width */
-        }
-        .folder:hover {
-            background-color: #21a1f1;
-        }
-        iframe {
-            width: 80%;
-            height: 600px;
-            border: none;
-            margin: 20px 0;
-        }
-    </style>
-</head>
-<body>
-    <header>
-        <h1>ビルドセレクター</h1>
-        <p>WebGLビルドをロードするバージョンを選択してください</p>
-    </header>
-    <div id="folder-list"></div>
-    <iframe id="build-frame" src="" title="Unity WebGL Build"></iframe>
-
+<!DOCTYPE html>
+<html lang="en-us">
+  <head>
+    <meta charset="utf-8">
+    <meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+    <title>Unity Web Player | Controller-Keymap</title>
+    <link rel="shortcut icon" href="TemplateData/favicon.ico">
+    <link rel="stylesheet" href="TemplateData/style.css">
+  </head>
+  <body>
+    <div id="unity-container" class="unity-desktop">
+      <canvas id="unity-canvas" width=960 height=600 tabindex="-1"></canvas>
+      <div id="unity-loading-bar">
+        <div id="unity-logo"></div>
+        <div id="unity-progress-bar-empty">
+          <div id="unity-progress-bar-full"></div>
+        </div>
+      </div>
+      <div id="unity-warning"> </div>
+      <div id="unity-footer">
+        <div id="unity-logo-title-footer"></div>
+        <div id="unity-fullscreen-button"></div>
+        <div id="unity-build-title">Controller-Keymap</div>
+      </div>
+    </div>
     <script>
-        const basePath = './webgl-builds/';
-        const folderList = document.getElementById('folder-list');
-        const buildFrame = document.getElementById('build-frame');
+      var canvas = document.querySelector("#unity-canvas");
 
-        // Function to fetch folder list and verify they are valid Unity WebGL builds
-        async function fetchFolders() {
-            try {
-                const response = await fetch(basePath);
-                const text = await response.text();
-                const parser = new DOMParser();
-                const doc = parser.parseFromString(text, 'text/html');
-
-                // Extract folder names from <a> tags and validate they are actual directories
-                const links = Array.from(doc.querySelectorAll('a'))
-                    .map(link => link.getAttribute('href'))
-                    .filter(name => isValidFolderName(name)); // Filter out invalid links
-
-                const folders = [];
-                for (const folderName of links) {
-                    const fullPath = `${basePath}${folderName}index.html`;
-                    try {
-                        const buildResponse = await fetch(fullPath);
-                        if (buildResponse.ok) {
-                            folders.push(folderName);
-                        }
-                    } catch (error) {
-                        console.warn(`Invalid folder: ${folderName}`);
-                    }
-                }
-
-                // Sort the folders in descending order (Z-A)
-                folders.sort((a, b) => b.localeCompare(a));
-
-                displayFolders(folders);
-            } catch (error) {
-                console.error('Error fetching folder list:', error);
-            }
+      // Shows a temporary message banner/ribbon for a few seconds, or
+      // a permanent error message on top of the canvas if type=='error'.
+      // If type=='warning', a yellow highlight color is used.
+      // Modify or remove this function to customize the visually presented
+      // way that non-critical warnings and error messages are presented to the
+      // user.
+      function unityShowBanner(msg, type) {
+        var warningBanner = document.querySelector("#unity-warning");
+        function updateBannerVisibility() {
+          warningBanner.style.display = warningBanner.children.length ? 'block' : 'none';
         }
-
-        // Helper function to check if a folder name is valid
-        function isValidFolderName(name) {
-            return (
-                name &&
-                !name.startsWith('?') && // Exclude query parameters like "?C=N;O=D"
-                !name.startsWith('/') && // Exclude root-level paths
-                name !== '../' && // Exclude parent directory
-                name !== './' && // Exclude current directory
-                !name.includes(';') // Exclude other invalid entries
-            );
+        var div = document.createElement('div');
+        div.innerHTML = msg;
+        warningBanner.appendChild(div);
+        if (type == 'error') div.style = 'background: red; padding: 10px;';
+        else {
+          if (type == 'warning') div.style = 'background: yellow; padding: 10px;';
+          setTimeout(function() {
+            warningBanner.removeChild(div);
+            updateBannerVisibility();
+          }, 5000);
         }
+        updateBannerVisibility();
+      }
 
-        // Function to display folders as buttons
-        function displayFolders(folders) {
-            folderList.innerHTML = '';
-            folders.forEach(folder => {
-                const button = document.createElement('button');
-                button.className = 'folder';
-                button.textContent = `Version ${folder}`; // Add "Version " to the folder name
-                button.onclick = () => openInNewTab(folder); // Open in new tab
-                folderList.appendChild(button);
-            });
-        }
+      var buildUrl = "Build";
+      var loaderUrl = buildUrl + "/ControllerKeycodeDetect.loader.js";
+      var config = {
+        arguments: [],
+        dataUrl: buildUrl + "/ControllerKeycodeDetect.data",
+        frameworkUrl: buildUrl + "/ControllerKeycodeDetect.framework.js",
+        codeUrl: buildUrl + "/ControllerKeycodeDetect.wasm",
+        streamingAssetsUrl: "StreamingAssets",
+        companyName: "DefaultCompany",
+        productName: "Controller-Keymap",
+        productVersion: "0.1",
+        showBanner: unityShowBanner,
+      };
 
-        // Function to open the selected build in a new tab
-        function openInNewTab(folder) {
-            const url = `${basePath}${folder}/index.html`;
-            window.open(url, '_blank'); // Open in a new tab
-        }
+      // By default, Unity keeps WebGL canvas render target size matched with
+      // the DOM size of the canvas element (scaled by window.devicePixelRatio)
+      // Set this to false if you want to decouple this synchronization from
+      // happening inside the engine, and you would instead like to size up
+      // the canvas DOM size and WebGL render target sizes yourself.
+      // config.matchWebGLToCanvasSize = false;
 
-        // Initial load
-        fetchFolders();
+      // If you would like all file writes inside Unity Application.persistentDataPath
+      // directory to automatically persist so that the contents are remembered when
+      // the user revisits the site the next time, uncomment the following line:
+      // config.autoSyncPersistentDataPath = true;
+      // This autosyncing is currently not the default behavior to avoid regressing
+      // existing user projects that might rely on the earlier manual
+      // JS_FileSystem_Sync() behavior, but in future Unity version, this will be
+      // expected to change.
+
+      if (/iPhone|iPad|iPod|Android/i.test(navigator.userAgent)) {
+        // Mobile device style: fill the whole browser client area with the game canvas:
+
+        var meta = document.createElement('meta');
+        meta.name = 'viewport';
+        meta.content = 'width=device-width, height=device-height, initial-scale=1.0, user-scalable=no, shrink-to-fit=yes';
+        document.getElementsByTagName('head')[0].appendChild(meta);
+        document.querySelector("#unity-container").className = "unity-mobile";
+        canvas.className = "unity-mobile";
+
+        // To lower canvas resolution on mobile devices to gain some
+        // performance, uncomment the following line:
+        // config.devicePixelRatio = 1;
+
+
+      } else {
+        // Desktop style: Render the game canvas in a window that can be maximized to fullscreen:
+        canvas.style.width = "960px";
+        canvas.style.height = "600px";
+      }
+
+      document.querySelector("#unity-loading-bar").style.display = "block";
+
+      var script = document.createElement("script");
+      script.src = loaderUrl;
+      script.onload = () => {
+        createUnityInstance(canvas, config, (progress) => {
+          document.querySelector("#unity-progress-bar-full").style.width = 100 * progress + "%";
+              }).then((unityInstance) => {
+                document.querySelector("#unity-loading-bar").style.display = "none";
+                document.querySelector("#unity-fullscreen-button").onclick = () => {
+                  unityInstance.SetFullscreen(1);
+                };
+
+              }).catch((message) => {
+                alert(message);
+              });
+            };
+
+      document.body.appendChild(script);
+
     </script>
-</body>
+  </body>
 </html>
