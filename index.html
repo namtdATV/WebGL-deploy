@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Unity WebGL Builds</title>
+    <title>Wakachiku WebGL Builds</title>
     <style>
         body {
             font-family: Arial, sans-serif;
@@ -21,7 +21,7 @@
             margin: 20px auto;
         }
         li {
-            margin: 15px 0;
+            margin: 20px 0; /* Space between items */
             text-align: center;
         }
         a {
@@ -29,9 +29,13 @@
             color: #007BFF;
             font-size: 18px;
             border: 1px solid #007BFF;
-            padding: 10px 20px;
+            padding: 15px 25px; /* Padding for buttons */
             border-radius: 5px;
             transition: background-color 0.3s, color 0.3s;
+            display: inline-block;
+            width: 100%; /* Make the button width 100% of the container */
+            box-sizing: border-box; /* Make sure padding is included in the width */
+            max-width: 300px; /* Max width for buttons */
         }
         a:hover {
             background-color: #007BFF;
@@ -40,7 +44,7 @@
     </style>
 </head>
 <body>
-    <h1>Unity WebGL Builds</h1>
+    <h1>Wakachiku WebGL Builds</h1>
     <ul id="buildList">
         <!-- Dynamically populated list -->
     </ul>
@@ -59,8 +63,9 @@
                 builds.forEach(build => {
                     const listItem = document.createElement("li");
                     const link = document.createElement("a");
+                    // Add "Version: " prefix to the build folder name
                     link.href = `./UnityBuilds/${build}/index.html`;
-                    link.textContent = build;
+                    link.textContent = `Version: ${build}`;
                     listItem.appendChild(link);
                     buildList.appendChild(listItem);
                 });
