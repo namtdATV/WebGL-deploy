@@ -41,7 +41,57 @@
       </div>
       <div id="unity-warning"> </div>
     </div>
+    <div id="start-overlay" style="
+      position: absolute;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      background: rgba(0, 0, 0, 0.8);
+      color: white;
+      display: none;
+      align-items: center;
+      justify-content: center;
+      font-size: 24px;
+      z-index: 9999;
+      cursor: pointer;">
+      Click to Start
+    </div>
     <script>
+      const overlay = document.getElementById("start-overlay");
+      const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
+
+      async function enterFullscreen() {
+        try {
+          const element = document.documentElement;
+          if (element.requestFullscreen) {
+            await element.requestFullscreen();
+          } else if (element.webkitRequestFullscreen) {
+            await element.webkitRequestFullscreen();
+          } else if (element.mozRequestFullScreen) {
+            await element.mozRequestFullScreen();
+          } else if (element.msRequestFullscreen) {
+            await element.msRequestFullscreen();
+          }
+          await screen.orientation.lock("landscape-primary");
+        } catch (err) {
+          console.warn("Fullscreen or orientation lock failed:", err);
+        }
+      }
+
+      if (isMobile) {
+          overlay.style.display = "flex";
+          overlay.addEventListener("click", async () => {
+            await enterFullscreen();
+            overlay.style.display = "none";
+          });
+
+          document.addEventListener("fullscreenchange", () => {
+            if (!document.fullscreenElement) {
+              overlay.style.display = "flex";
+            }
+          });
+      }
       window.addEventListener("load", function () {
         if ("serviceWorker" in navigator) {
           navigator.serviceWorker.register("ServiceWorker.js");

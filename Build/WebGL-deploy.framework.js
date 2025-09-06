@@ -1282,10 +1282,10 @@ function dbg(text) {
 // === Body ===
 
 var ASM_CONSTS = {
-  5585376: () => { Module['emscripten_get_now_backup'] = performance.now; },  
- 5585431: ($0) => { performance.now = function() { return $0; }; },  
- 5585479: ($0) => { performance.now = function() { return $0; }; },  
- 5585527: () => { performance.now = Module['emscripten_get_now_backup']; }
+  5585712: () => { Module['emscripten_get_now_backup'] = performance.now; },  
+ 5585767: ($0) => { performance.now = function() { return $0; }; },  
+ 5585815: ($0) => { performance.now = function() { return $0; }; },  
+ 5585863: () => { performance.now = Module['emscripten_get_now_backup']; }
 };
 
 
@@ -7527,6 +7527,11 @@ var ASM_CONSTS = {
   function _JS_SystemInfo_HasWebGPU()
   	{
   		return Module.SystemInfo.hasWebGPU;
+  	}
+
+  function _JS_SystemInfo_IsMobile() 
+  	{
+  		return Module.SystemInfo.mobile;
   	}
 
   function _JS_UnityEngineShouldQuit() {
@@ -17646,6 +17651,7 @@ var wasmImports = {
   "JS_SystemInfo_HasFullscreen": _JS_SystemInfo_HasFullscreen,
   "JS_SystemInfo_HasWebGL": _JS_SystemInfo_HasWebGL,
   "JS_SystemInfo_HasWebGPU": _JS_SystemInfo_HasWebGPU,
+  "JS_SystemInfo_IsMobile": _JS_SystemInfo_IsMobile,
   "JS_UnityEngineShouldQuit": _JS_UnityEngineShouldQuit,
   "JS_Video_CanPlayFormat": _JS_Video_CanPlayFormat,
   "JS_Video_Create": _JS_Video_Create,
