@@ -1,6 +1,6 @@
 body {
     padding: 0;
-    margin: 0;
+    margin: 0
 }
 
 #unity-container {
@@ -12,7 +12,7 @@ body {
 #unity-canvas {
     width: 100%;
     height: 100%;
-    background: #231F20;
+    background: #231F20
 }
 
 #unity-loading-bar {
@@ -23,33 +23,34 @@ body {
     display: none;
     background-color: white; /* Set the loading background to white */
     padding: 20px; /* Optional: Add some padding around the loading bar */
-    padding-left: 100px;
-    padding-right: 100px;
+    padding-left: 50px;
+    padding-right: 50px;
     border-radius: 8px; /* Optional: Add rounded corners */
 }
 
 #logo-container {
     display: flex; /* Align items horizontally */
     align-items: center; /* Vertically align items */
-    justify-content: flex-end; /* Align the container to the right */
+    justify-content: center; /* Align items to the center horizontally */
     position: relative; /* Allows precise positioning */
-    width: 100%; /* Full width of the container */
+    width: 100%; /* Make the logo container take up the full width */
     margin-top: 20px; /* Add spacing above the container */
 }
 
 #logo {
-    width: 15vw; /* 20% of the viewport width */
+    width: 20vw; /* 20% of the viewport width */
     height: auto; /* Maintain aspect ratio */
     display: block; /* Ensures it's displayed properly as a block element */
-    margin: 0 auto; /* Center the logo horizontally */
+    margin: 0px; /* Center the logo horizontally */
     padding: 20px;
+    padding-top: 40px;
     padding-bottom: 60px;
 }
 
 #unity-progress-bar-empty {
     margin-left: auto;
     margin-right: auto;
-    width: 600px;
+    width: 700px;
     height: 36px;
     margin-top: 40px;
     background-color: #99D9EA; /* Background color for the empty bar */
@@ -69,7 +70,7 @@ body {
     transform: translate(-50%);
     background: white;
     padding: 10px;
-    display: none;
+    display: none
 }
 
 #boat-icon {
