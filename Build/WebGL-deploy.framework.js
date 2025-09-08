@@ -27,7 +27,7 @@ Module['ready'] = new Promise((resolve, reject) => {
   readyPromiseResolve = resolve;
   readyPromiseReject = reject;
 });
-["_main","getExceptionMessage","___get_exception_message","_free","_ReleaseKeys","_GetCopyBufferAsCStr","_getMetricsInfo","_SendMessageFloat","_SendMessageString","_SendMessage","_SetFullscreen","_InjectProfilerSample","_SendPasteEvent","_fflush","onRuntimeInitialized"].forEach((prop) => {
+["_main","getExceptionMessage","___get_exception_message","_free","_GetFakemodTimeInSeconds","_ReleaseKeys","_GetCopyBufferAsCStr","_getMetricsInfo","_SendMessageFloat","_SendMessageString","_SendMessage","_SetFullscreen","_InjectProfilerSample","_SendPasteEvent","_fflush","onRuntimeInitialized"].forEach((prop) => {
   if (!Object.getOwnPropertyDescriptor(Module['ready'], prop)) {
     Object.defineProperty(Module['ready'], prop, {
       get: () => abort('You are getting ' + prop + ' on the Promise object, instead of the instance. Use .then() to get called back with the instance, see the MODULARIZE docs in src/settings.js'),
@@ -55,7 +55,9 @@ var abort = function (what) {
   if (what !== undefined) {
     out(what);
     err(what);
-    what = JSON.stringify(what)
+    // Convert "what" to a string for the abort handler.
+    // Use .toString() method for Error objects to get a readable text.
+    what = (what instanceof Error) ? what.toString() : JSON.stringify(what);
   } else {
     what = "";
   }
@@ -148,9 +150,9 @@ if (!Module['ENVIRONMENT_IS_PTHREAD']) {
             return node;
           };
           // Also kick off persisting the filesystem on other operations that modify the filesystem.
-          mnt.node_ops.rmdir   = function(path)       { IDBFS.queuePersist(mnt.mount); return memfs_node_ops.rmdir(path); };
-          mnt.node_ops.unlink  = function(path)       { IDBFS.queuePersist(mnt.mount); return memfs_node_ops.unlink(path); };
-          mnt.node_ops.mkdir   = function(path, mode) { IDBFS.queuePersist(mnt.mount); return memfs_node_ops.mkdir(path, mode); };
+          mnt.node_ops.rmdir   = function(parent, name) { IDBFS.queuePersist(mnt.mount); return memfs_node_ops.rmdir(parent, name); };
+          mnt.node_ops.unlink  = function(parent, name) { IDBFS.queuePersist(mnt.mount); return memfs_node_ops.unlink(parent, name); };
+          mnt.node_ops.mkdir   = function(path, mode)   { IDBFS.queuePersist(mnt.mount); return memfs_node_ops.mkdir(path, mode); };
           mnt.node_ops.symlink = function(parent, newname, oldpath)    { IDBFS.queuePersist(mnt.mount); return memfs_node_ops.symlink(parent, newname, oldpath); };
           mnt.node_ops.rename  = function(old_node, new_dir, new_name) { IDBFS.queuePersist(mnt.mount); return memfs_node_ops.rename(old_node, new_dir, new_name); };
         }
@@ -290,15 +292,6 @@ function enumerateMediaDeviceList() {
 		console.warn('Unable to enumerate media devices: ' + e + '\nWebcams will not be available.');
 		disableAccessToMediaDevices();
 	});
-
-	// Work around Firefox 81 bug on Windows:
-	// https://bugzilla.mozilla.org/show_bug.cgi?id=1397977, devicechange
-	// events do not fire, so resort to polling for device changes once every
-	// 60 seconds.
-	if (/Firefox/.test(navigator.userAgent)) {
-		setTimeout(enumerateMediaDeviceList, 60000);
-		warnOnce('Applying workaround to Firefox bug https://bugzilla.mozilla.org/show_bug.cgi?id=1397977');
-	}
 }
 
 function disableAccessToMediaDevices() {
@@ -1282,10 +1275,10 @@ function dbg(text) {
 // === Body ===
 
 var ASM_CONSTS = {
-  5585712: () => { Module['emscripten_get_now_backup'] = performance.now; },  
- 5585767: ($0) => { performance.now = function() { return $0; }; },  
- 5585815: ($0) => { performance.now = function() { return $0; }; },  
- 5585863: () => { performance.now = Module['emscripten_get_now_backup']; }
+  5615440: () => { Module['emscripten_get_now_backup'] = performance.now; },  
+ 5615495: ($0) => { performance.now = function() { return $0; }; },  
+ 5615543: ($0) => { performance.now = function() { return $0; }; },  
+ 5615591: () => { performance.now = Module['emscripten_get_now_backup']; }
 };
 
 
@@ -6248,13 +6241,14 @@ var ASM_CONSTS = {
   		}
   	}
 
-  var WEBAudio = {audioInstanceIdCounter:0,audioInstances:{},audioContext:null,audioWebEnabled:0,audioCache:[],pendingAudioSources:{},FAKEMOD_SAMPLERATE:44100};
+  var WEBAudio = {audioInstanceIdCounter:0,audioInstances:{},audioContext:null,audioWebEnabled:0,audioCache:[],pendingAudioSources:{},FAKEMOD_SAMPLERATE:44100,audioContextSuspendedTime:0,audioContextResumeOffset:0,contextIsRunning:false,soundsPendingContextResume:[]};
   function jsAudioMixinSetPitch(source) {
   	// Add a helper to AudioBufferSourceNode which gives the current playback position of the clip in seconds.
   	source.estimatePlaybackPosition = function () {
   		var t = (WEBAudio.audioContext.currentTime - source.playbackStartTime) * source.playbackRate.value;
   		// Collapse extra times that the audio clip has looped through.
   		if (source.loop && t >= source.loopStart) {
+  
   			t = (t - source.loopStart) % (source.loopEnd - source.loopStart) + source.loopStart;
   		}
   		return t;
@@ -6287,7 +6281,7 @@ var ASM_CONSTS = {
   	 */
   	soundClip.getLength = function () {
   		if (!this.buffer) {
-  			console.log ("Trying to get length of sound which is not loaded.");
+  			console.log ("Trying to get length of sound which is not loaded yet.");
   			return 0;
   		}
   
@@ -6407,6 +6401,7 @@ var ASM_CONSTS = {
   	 * @param {number} startOffset Start offset in seconds
   	 */
   	channel.playSoundClip = function (soundClip, startTime, startOffset) {
+  
   		try {
   			var self = this;
   			this.source = soundClip.createSourceNode();
@@ -6516,7 +6511,7 @@ var ASM_CONSTS = {
   	/**
   	 * Resume playback on channel.
   	 */
-  	channel.resume = function () {
+  	channel.resume = function (offset = 0) {
   		// If the source is a compressed audio MediaElement, it was directly paused so we can
   		// directly play it again.
   		if (this.source && this.source.mediaElement) {
@@ -6531,8 +6526,14 @@ var ASM_CONSTS = {
   		}
   
   		var pausedSource = this.source;
+  
+  		// In case playbackPausedAtPosition returns negative, we use its absolute value as the start delay
+  		var startTime = WEBAudio.audioContext.currentTime;
+  		if (pausedSource.playbackPausedAtPosition < 0)
+  			startTime -= pausedSource.playbackPausedAtPosition;
+  
   		var soundClip = jsAudioCreateUncompressedSoundClip(pausedSource.buffer, false);
-  		this.playSoundClip(soundClip, WEBAudio.audioContext.currentTime, Math.max(0, pausedSource.playbackPausedAtPosition));
+  		this.playSoundClip(soundClip, startTime, Math.max(0, pausedSource.playbackPausedAtPosition) + offset);
   		this.source.loop = pausedSource.loop;
   		this.source.loopStart = pausedSource.loopStart;
   		this.source.loopEnd = pausedSource.loopEnd;
@@ -6821,22 +6822,69 @@ var ASM_CONSTS = {
   	return true;
   }
 
-  function jsAudioPlayPendingBlockedAudio(soundId) {
-  	var pendingAudio = WEBAudio.pendingAudioSources[soundId];
-  	pendingAudio.sourceNode._startPlayback(pendingAudio.offset);
-  	delete WEBAudio.pendingAudioSources[soundId];
-  }
-  
-  function jsAudioPlayBlockedAudios() {
-  	Object.keys(WEBAudio.pendingAudioSources).forEach(function (audioId) {
-  		jsAudioPlayPendingBlockedAudio(audioId);
-  	});
-  }
-  
   function _JS_Sound_Init() {
+  
   	try {
   		window.AudioContext = window.AudioContext || window.webkitAudioContext;
   		WEBAudio.audioContext = new AudioContext();
+  		WEBAudio.audioContextSuspendedTime = _GetFakemodTimeInSeconds();
+  		WEBAudio.audioContextResumeOffset = 0;
+  
+  		WEBAudio.audioContext.onstatechange = () => {
+  			var contextState = WEBAudio.audioContext.state;
+  
+  			if (contextState === 'running') {
+  
+  				WEBAudio.contextIsRunning = true;
+  				var currentTime = _GetFakemodTimeInSeconds();
+  				WEBAudio.audioContextResumeOffset = currentTime - WEBAudio.audioContextSuspendedTime;
+  				console.log('Audio context resumed after ' + WEBAudio.audioContextResumeOffset.toFixed(3) + ' seconds.');
+  
+  				var sound = WEBAudio.soundsPendingContextResume.pop();
+  				while (sound !== undefined) {
+  
+  					// Sound was paused
+  					if (sound.channel.source) {
+  						sound.channel.resume(sound.offset + WEBAudio.audioContextResumeOffset);
+  
+  					// Sound was not started yet
+  					} else {
+  						var resumeOffset = 0;
+  						if (currentTime > sound.startTime)
+  							resumeOffset = currentTime - sound.startTime;
+  
+  						sound.channel.playSoundClip(
+  							sound.clip,
+  							sound.startTime,
+  							sound.offset + resumeOffset,
+  						);
+  					}
+  
+  					sound = WEBAudio.soundsPendingContextResume.pop();
+  				}
+  					
+  			} else {
+    
+  				WEBAudio.contextIsRunning = false;
+  				console.log('Audio context suspended.');
+  				WEBAudio.audioContextSuspendedTime = _GetFakemodTimeInSeconds();
+  
+  				Object.values(WEBAudio.audioInstances).forEach(audioInstance => {
+  					if (audioInstance.source != null)
+  					{
+  						if (!audioInstance.isPaused()) {
+  							audioInstance.pause();
+  							WEBAudio.soundsPendingContextResume.push({
+  							channel: audioInstance,
+  							clip: null,
+  							startTime: null,
+  							offset: audioInstance.source.playbackPausedAtPosition,
+  						});
+  						}
+  					}
+  				});
+  			}
+  		}
   
   		var tryToResumeAudioContext = function () {
   			if (WEBAudio.audioContext.state === 'suspended')
@@ -6866,9 +6914,6 @@ var ASM_CONSTS = {
   						console.warn("Could not resume audio context. Exception: " + error);
   					});
   				}
-  
-  				// Play blocked audio elements
-  				jsAudioPlayBlockedAudios();
   
   				// How many audio elements should we cache? How many compressed audio channels might
   				// be played at a single time?
@@ -6915,13 +6960,6 @@ var ASM_CONSTS = {
   	return soundClip;
   }
   
-  
-  function jsAudioAddPendingBlockedAudio(sourceNode, offset) {
-  	WEBAudio.pendingAudioSources[sourceNode.mediaElement.src] = {
-  		sourceNode: sourceNode,
-  		offset: offset
-  	};
-  }
   
   function jsAudioGetMimeTypeFromType(fmodSoundType) {
   	switch(fmodSoundType)
@@ -7105,10 +7143,6 @@ var ASM_CONSTS = {
   					source.playPromise = null;
   					if (error.name !== 'NotAllowedError')
   						throw error;
-  
-  					// Playing a media element may fail if there was no previous user interaction
-  					// Retry playback when there was a user interaction
-  					jsAudioAddPendingBlockedAudio(source, offset);
   				});
   			}
   		};
@@ -7254,8 +7288,17 @@ var ASM_CONSTS = {
   	}
   
   	try {
-  		channel.playSoundClip(soundClip, WEBAudio.audioContext.currentTime + delay, offset);
-  	} catch (error) {
+  		if (WEBAudio.contextIsRunning) {
+  			channel.playSoundClip(soundClip, WEBAudio.audioContext.currentTime + delay, offset);
+  		} else {
+  			WEBAudio.soundsPendingContextResume.push({
+  				channel: channel,
+  				clip: soundClip,
+  				startTime: WEBAudio.audioContext.currentTime + delay,
+  				offset: offset
+  			});
+  		}
+  	} catch (e) {
   		console.error("playSoundClip error. Exception: " + e);
   	}
   }
@@ -7726,8 +7769,10 @@ var ASM_CONSTS = {
   	var v = videoInstances[video];
   	// Fix for iOS: readyState is only set to have HAVE_METADATA
   	// until video.play() is called.
+  	// Fix for Firefox: when the network bandwidth is low, after multiple video.play() calls, the video readyState changes to HAVE_FUTURE_DATA.
+  	// Firefox bug: https://bugzilla.mozilla.org/show_bug.cgi?id=1927698 
   	// Wait for HAVE_ENOUGH_DATA on other platforms.
-  	var targetReadyState = /(iPhone|iPad)/i.test(navigator.userAgent) ? v.HAVE_METADATA : v.HAVE_ENOUGH_DATA;
+  	var targetReadyState = /(iPhone|iPad)/i.test(navigator.userAgent) ? v.HAVE_METADATA : /(Firefox)/i.test(navigator.userAgent) ? v.HAVE_FUTURE_DATA : v.HAVE_ENOUGH_DATA;
   
   	// If the ready state is targer ready state or higher, we can start playing.
   	if (!v.isReady &&
@@ -7921,6 +7966,18 @@ var ASM_CONSTS = {
   function _JS_Video_UpdateToTexture(video, tex, adjustToLinearspace)
   {
   	var v = videoInstances[video];
+  	
+  	// Some browsers (Fireforx)	do not support the requestVideoFrameCallback API, so we cannot use v.isLoaded
+  	if (typeof v.requestVideoFrameCallback === 'function')
+  	{
+  		if (!v.isLoaded)
+  			return false;
+  	}
+  	else
+  	{
+  		if (!v.isReady)
+  			return false;
+  	}
   
   	// If the source video has not yet loaded (size is reported as 0), ignore uploading
   	// The videoReady property is set when the play promise resolves. The video isn't truly
@@ -8082,6 +8139,7 @@ var ASM_CONSTS = {
   		GLctx.bindBuffer(GLctx.ARRAY_BUFFER, s2lVBO);
   		GLctx.enableVertexAttribArray(s2lVertexPositionNDC);
   		GLctx.vertexAttribPointer(s2lVertexPositionNDC, 2, GLctx.FLOAT, false, 0, 0);
+  		GLctx.disable(GLctx.CULL_FACE);
   		GLctx.drawArrays(GLctx.TRIANGLES, 0, 6);
   
   		// Have to reset the viewport rect ourselves, otherwise further drawing in
@@ -8142,7 +8200,7 @@ var ASM_CONSTS = {
     }
   
   function wgpu_checked_shift(ptr, shift) {
-      assert((ptr >>> shift) << shift == ptr);
+      assert(((ptr >>> shift) << shift) >>> 0 == (ptr >>> 0));
       return ptr >>> shift;
     }
   var wgpu = {};
@@ -8675,7 +8733,7 @@ var ASM_CONSTS = {
             addr: addr,
             port: port,
             socket: ws,
-            dgram_send_queue: []
+            msg_send_queue: []
           };
   
           SOCKFS.websocket_sock_ops.addPeer(sock, peer);
@@ -8685,7 +8743,7 @@ var ASM_CONSTS = {
           // us to override the ephemeral port reported to us by remotePort on the
           // remote end.
           if (sock.type === 2 && typeof sock.sport != 'undefined') {
-            peer.dgram_send_queue.push(new Uint8Array([
+            peer.msg_send_queue.push(new Uint8Array([
                 255, 255, 255, 255,
                 'p'.charCodeAt(0), 'o'.charCodeAt(0), 'r'.charCodeAt(0), 't'.charCodeAt(0),
                 ((sock.sport & 0xff00) >> 8) , (sock.sport & 0xff)
@@ -8707,10 +8765,11 @@ var ASM_CONSTS = {
             Module['websocket'].emit('open', sock.stream.fd);
   
             try {
-              var queued = peer.dgram_send_queue.shift();
+              var queued = peer.msg_send_queue.shift();
               while (queued) {
+                console.error('peer.socket.send(queued)');
                 peer.socket.send(queued);
-                queued = peer.dgram_send_queue.shift();
+                queued = peer.msg_send_queue.shift();
               }
             } catch (e) {
               // not much we can do here in the way of proper error handling as we've already
@@ -8901,8 +8960,18 @@ var ASM_CONSTS = {
           sock.daddr = peer.addr;
           sock.dport = peer.port;
   
+  // Local Cherry-pick PR https://github.com/emscripten-core/emscripten/pull/22630
+  // to fix https://jira.unity3d.com/browse/UUM-79682 .
+  
+  // old:
           // always "fail" in non-blocking mode
-          throw new FS.ErrnoError(26);
+  //        throw new FS.ErrnoError(26);
+  
+  // new:
+          // because we cannot synchronously block to wait for the WebSocket
+          // connection to complete, we return here pretending that the connection
+          // was a success.
+  
         },listen:function(sock, backlog) {
           if (!ENVIRONMENT_IS_NODE) {
             throw new FS.ErrnoError(138);
@@ -8954,9 +9023,11 @@ var ASM_CONSTS = {
           if (sock.type === 1) {
             if (!dest || dest.socket.readyState === dest.socket.CLOSING || dest.socket.readyState === dest.socket.CLOSED) {
               throw new FS.ErrnoError(53);
-            } else if (dest.socket.readyState === dest.socket.CONNECTING) {
-              throw new FS.ErrnoError(6);
             }
+  
+  // Local Cherry-pick PR https://github.com/emscripten-core/emscripten/pull/22630
+  // to fix https://jira.unity3d.com/browse/UUM-79682 .
+  
           }
   
           // create a copy of the incoming data to send, as the WebSocket API
@@ -8970,18 +9041,21 @@ var ASM_CONSTS = {
           var data;
             data = buffer.slice(offset, offset + length);
   
-          // if we're emulating a connection-less dgram socket and don't have
-          // a cached connection, queue the buffer to send upon connect and
-          // lie, saying the data was sent now.
-          if (sock.type === 2) {
-            if (!dest || dest.socket.readyState !== dest.socket.OPEN) {
-              // if we're not connected, open a new connection
+  // XXX Emscripten cherrypicked patch for Unity 3.1.8-unity.
+  // After Emscripten is updated next time, this file can be deleted.
+  
+          // if we don't have a cached connectionless UDP datagram connection, or
+          // the TCP socket is still connecting, queue the message to be sent upon
+          // connect, and lie, saying the data was sent now.
+          if (!dest || dest.socket.readyState !== dest.socket.OPEN) {
+            // if we're not connected, open a new connection
+            if (sock.type === 2) {
               if (!dest || dest.socket.readyState === dest.socket.CLOSING || dest.socket.readyState === dest.socket.CLOSED) {
                 dest = SOCKFS.websocket_sock_ops.createPeer(sock, addr, port);
               }
-              dest.dgram_send_queue.push(data);
-              return length;
             }
+            dest.msg_send_queue.push(data);
+            return length;
           }
   
           try {
@@ -13242,30 +13316,31 @@ var ASM_CONSTS = {
   function _glBlitFramebuffer(x0, x1, x2, x3, x4, x5, x6, x7, x8, x9) { GLctx.blitFramebuffer(x0, x1, x2, x3, x4, x5, x6, x7, x8, x9) }
 
   function _glBufferData(target, size, data, usage) {
-  
-      if (GL.currentContext.version >= 2) { // WebGL 2 provides new garbage-free entry points to call to WebGL. Use those always when possible.
-        // If size is zero, WebGL would interpret uploading the whole input arraybuffer (starting from given offset), which would
-        // not make sense in WebAssembly, so avoid uploading if size is zero. However we must still call bufferData to establish a
-        // backing storage of zero bytes.
-        if (data && size) {
-          GLctx.bufferData(target, HEAPU8, usage, data, size);
-        } else {
-          GLctx.bufferData(target, size, usage);
-        }
-      } else {
-        // N.b. here first form specifies a heap subarray, second form an integer size, so the ?: code here is polymorphic. It is advised to avoid
-        // randomly mixing both uses in calling code, to avoid any potential JS engine JIT issues.
-        GLctx.bufferData(target, data ? HEAPU8.subarray(data, data+size) : size, usage);
+          if (HEAPU8.length <= 2147483648) {
+              // WebGL 2 provides new garbage-free entry points to call to WebGL. Use those always when possible.
+              // If size is zero, WebGL would interpret uploading the whole input arraybuffer (starting from given offset), which would
+              // not make sense in WebAssembly, so avoid uploading if size is zero. However we must still call bufferData to establish a
+              // backing storage of zero bytes.
+              if (data && size) {
+                  GLctx.bufferData(target, HEAPU8, usage, data, size);
+              } else {
+                  GLctx.bufferData(target, size, usage);
+              }
+          } else {
+              // N.b. here first form specifies a heap subarray, second form an integer size, so the ?: code here is polymorphic. It is advised to avoid
+              // randomly mixing both uses in calling code, to avoid any potential JS engine JIT issues.
+              GLctx.bufferData(target, data ? HEAPU8.subarray((data), (data+size)) : size, usage);
+          }
       }
-    }
 
   function _glBufferSubData(target, offset, size, data) {
-      if (GL.currentContext.version >= 2) { // WebGL 2 provides new garbage-free entry points to call to WebGL. Use those always when possible.
-        size && GLctx.bufferSubData(target, offset, HEAPU8, data, size);
-        return;
+          if (HEAPU8.length <= 2147483648) {
+              // WebGL 2 provides new garbage-free entry points to call to WebGL. Use those always when possible.
+              size && GLctx.bufferSubData(target, offset, HEAPU8, data, size);
+              return;
+          }
+          GLctx.bufferSubData(target, offset, HEAPU8.subarray((data), (data+size)));
       }
-      GLctx.bufferSubData(target, offset, HEAPU8.subarray(data, data+size));
-    }
 
   function _glCheckFramebufferStatus(x0) { return GLctx.checkFramebufferStatus(x0) }
 
@@ -13274,14 +13349,26 @@ var ASM_CONSTS = {
   function _glClearBufferfi(x0, x1, x2, x3) { GLctx.clearBufferfi(x0, x1, x2, x3) }
 
   function _glClearBufferfv(buffer, drawbuffer, value) {
-  
-      GLctx.clearBufferfv(buffer, drawbuffer, HEAPF32, (value >> 2));
-    }
+          if (HEAPU8.length <= 2147483648) {
+              GLctx.clearBufferfv(buffer, drawbuffer, HEAPF32, (value >> 2));
+          } else {
+              // WORKAROUND: Create view of heap region smaller than 2 GB
+              // value points to an array of 4 floats
+              var view = HEAPF32.subarray((value)>>2, (value+16)>>2);
+              GLctx.clearBufferfv(buffer, drawbuffer, view, 0);
+          }
+      }
 
   function _glClearBufferuiv(buffer, drawbuffer, value) {
-  
-      GLctx.clearBufferuiv(buffer, drawbuffer, HEAPU32, (value >> 2));
-    }
+          if (HEAPU8.length <= 2147483648) {
+              GLctx.clearBufferuiv(buffer, drawbuffer, HEAPU32, (value >> 2));
+          } else {
+              // WORKAROUND: Create view of heap region smaller than 2 GB
+              // value points to an array of 4 unsigned integer
+              var view = HEAPU32.subarray((value)>>2, (value+16)>>2);
+              GLctx.clearBufferuiv(buffer, drawbuffer, view, 0);
+          }
+      }
 
   function _glClearColor(x0, x1, x2, x3) { GLctx.clearColor(x0, x1, x2, x3) }
 
@@ -13307,44 +13394,50 @@ var ASM_CONSTS = {
     }
 
   function _glCompressedTexImage2D(target, level, internalFormat, width, height, border, imageSize, data) {
-      if (GL.currentContext.version >= 2) { // WebGL 2 provides new garbage-free entry points to call to WebGL. Use those always when possible.
-        if (GLctx.currentPixelUnpackBufferBinding || !imageSize) {
-          GLctx.compressedTexImage2D(target, level, internalFormat, width, height, border, imageSize, data);
-        } else {
-          GLctx.compressedTexImage2D(target, level, internalFormat, width, height, border, HEAPU8, data, imageSize);
-        }
-        return;
+          // WebGL 2 provides new garbage-free entry points to call to WebGL. Use those always when possible.
+          if (GLctx.currentPixelUnpackBufferBinding || !imageSize) {
+              GLctx.compressedTexImage2D(target, level, internalFormat, width, height, border, imageSize, data);
+          } else if (HEAPU8.length <= 2147483648) {
+              GLctx.compressedTexImage2D(target, level, internalFormat, width, height, border, HEAPU8, data, imageSize);
+          } else {
+              // WORKAROUND: Create view of heap region smaller than 2 GB
+              GLctx.compressedTexImage2D(target, level, internalFormat, width, height, border, data ? HEAPU8.subarray((data), (data+imageSize)) : null);
+          }
       }
-      GLctx.compressedTexImage2D(target, level, internalFormat, width, height, border, data ? HEAPU8.subarray((data), (data+imageSize)) : null);
-    }
 
   function _glCompressedTexImage3D(target, level, internalFormat, width, height, depth, border, imageSize, data) {
-      if (GLctx.currentPixelUnpackBufferBinding) {
-        GLctx.compressedTexImage3D(target, level, internalFormat, width, height, depth, border, imageSize, data);
-      } else {
-        GLctx.compressedTexImage3D(target, level, internalFormat, width, height, depth, border, HEAPU8, data, imageSize);
+          if (GLctx.currentPixelUnpackBufferBinding) {
+              GLctx.compressedTexImage3D(target, level, internalFormat, width, height, depth, border, imageSize, data);
+          } else if (HEAPU8.length <= 2147483648) {
+              GLctx.compressedTexImage3D(target, level, internalFormat, width, height, depth, border, HEAPU8, data, imageSize);
+          } else {
+              // WORKAROUND: Create view of heap region smaller than 2 GB
+              GLctx.compressedTexImage3D(target, level, internalFormat, width, height, depth, border, data ? HEAPU8.subarray((data), (data+imageSize)) : null);
+          }
       }
-    }
 
   function _glCompressedTexSubImage2D(target, level, xoffset, yoffset, width, height, format, imageSize, data) {
-      if (GL.currentContext.version >= 2) { // WebGL 2 provides new garbage-free entry points to call to WebGL. Use those always when possible.
-        if (GLctx.currentPixelUnpackBufferBinding || !imageSize) {
-          GLctx.compressedTexSubImage2D(target, level, xoffset, yoffset, width, height, format, imageSize, data);
-        } else {
-          GLctx.compressedTexSubImage2D(target, level, xoffset, yoffset, width, height, format, HEAPU8, data, imageSize);
-        }
-        return;
+          // WebGL 2 provides new garbage-free entry points to call to WebGL. Use those always when possible.
+          if (GLctx.currentPixelUnpackBufferBinding || !imageSize) {
+              GLctx.compressedTexSubImage2D(target, level, xoffset, yoffset, width, height, format, imageSize, data);
+          } else if (HEAPU8.length <= 2147483648) {
+              GLctx.compressedTexSubImage2D(target, level, xoffset, yoffset, width, height, format, HEAPU8, data, imageSize);
+          } else {
+              // WORKAROUND: Create view of heap region smaller than 2 GB
+              GLctx.compressedTexSubImage2D(target, level, xoffset, yoffset, width, height, format, data ? HEAPU8.subarray((data), (data+imageSize)) : null);
+          }
       }
-      GLctx.compressedTexSubImage2D(target, level, xoffset, yoffset, width, height, format, data ? HEAPU8.subarray((data), (data+imageSize)) : null);
-    }
 
   function _glCompressedTexSubImage3D(target, level, xoffset, yoffset, zoffset, width, height, depth, format, imageSize, data) {
-      if (GLctx.currentPixelUnpackBufferBinding) {
-        GLctx.compressedTexSubImage3D(target, level, xoffset, yoffset, zoffset, width, height, depth, format, imageSize, data);
-      } else {
-        GLctx.compressedTexSubImage3D(target, level, xoffset, yoffset, zoffset, width, height, depth, format, HEAPU8, data, imageSize);
+          if (GLctx.currentPixelUnpackBufferBinding) {
+              GLctx.compressedTexSubImage3D(target, level, xoffset, yoffset, zoffset, width, height, depth, format, imageSize, data);
+          } else if (HEAPU8.length <= 2147483648) {
+              GLctx.compressedTexSubImage3D(target, level, xoffset, yoffset, zoffset, width, height, depth, format, HEAPU8, data, imageSize);
+          } else {
+              // WORKAROUND: Create view of heap region smaller than 2 GB
+              GLctx.compressedTexSubImage3D(target, level, xoffset, yoffset, zoffset, width, height, depth, format, data ? HEAPU8.subarray((data), (data+imageSize)) : null);
+          }
       }
-    }
 
   function _glCopyBufferSubData(x0, x1, x2, x3, x4) { GLctx.copyBufferSubData(x0, x1, x2, x3, x4) }
 
@@ -13623,37 +13716,41 @@ var ASM_CONSTS = {
           return false;
       }
     }
-  
   function _glFlushMappedBufferRange(target, offset, length) {
-      if (!emscriptenWebGLValidateMapBufferTarget(target)) {
-        GL.recordError(0x500/*GL_INVALID_ENUM*/);
-        err('GL_INVALID_ENUM in glFlushMappedBufferRange');
-        return;
-      }
+          // Force offset and length to uint
+          offset >>>= 0;
+          length >>>= 0;
   
-      var mapping = GL.mappedBuffers[emscriptenWebGLGetBufferBinding(target)];
-      if (!mapping) {
-        GL.recordError(0x502 /* GL_INVALID_OPERATION */);
-        err('buffer was never mapped in glFlushMappedBufferRange');
-        return;
-      }
+          if (!emscriptenWebGLValidateMapBufferTarget(target)) {
+              GL.recordError(0x500/*GL_INVALID_ENUM*/);
+              err('GL_INVALID_ENUM in glFlushMappedBufferRange');
+              return;
+          }
   
-      if (!(mapping.access & 0x10)) {
-        GL.recordError(0x502 /* GL_INVALID_OPERATION */);
-        err('buffer was not mapped with GL_MAP_FLUSH_EXPLICIT_BIT in glFlushMappedBufferRange');
-        return;
-      }
-      if (offset < 0 || length < 0 || offset + length > mapping.length) {
-        GL.recordError(0x501 /* GL_INVALID_VALUE */);
-        err('invalid range in glFlushMappedBufferRange');
-        return;
-      }
+          var mapping = GL.mappedBuffers[emscriptenWebGLGetBufferBinding(target)];
+          if (!mapping) {
+              GL.recordError(0x502 /* GL_INVALID_OPERATION */);
+              err('buffer was never mapped in glFlushMappedBufferRange');
+              return;
+          }
   
-      GLctx.bufferSubData(
-        target,
-        mapping.offset,
-        HEAPU8.subarray(mapping.mem + offset, mapping.mem + offset + length));
-    }
+          if (!(mapping.access & 0x10)) {
+              GL.recordError(0x502 /* GL_INVALID_OPERATION */);
+              err('buffer was not mapped with GL_MAP_FLUSH_EXPLICIT_BIT in glFlushMappedBufferRange');
+              return;
+          }
+          if (offset < 0 || length < 0 || offset + length > mapping.length) {
+              GL.recordError(0x501 /* GL_INVALID_VALUE */);
+              err('invalid range in glFlushMappedBufferRange');
+              return;
+          }
+  
+          GLctx.bufferSubData(
+              target,
+              mapping.offset,
+              HEAPU8.subarray((mapping.mem+offset), (mapping.mem+offset+length))
+          );
+      }
 
   function _glFramebufferRenderbuffer(target, attachment, renderbuffertarget, renderbuffer) {
       GLctx.framebufferRenderbuffer(target, attachment, renderbuffertarget,
@@ -13819,14 +13916,18 @@ var ASM_CONSTS = {
     }
 
   function _glGetBufferSubData(target, offset, size, data) {
-      if (!data) {
-        // GLES2 specification does not specify how to behave if data is a null pointer. Since calling this function does not make sense
-        // if data == null, issue a GL error to notify user about it.
-        GL.recordError(0x501 /* GL_INVALID_VALUE */);
-        return;
+          if (!data) {
+              // GLES2 specification does not specify how to behave if data is a null pointer. Since calling this function does not make sense
+              // if data == null, issue a GL error to notify user about it.
+              GL.recordError(0x501 /* GL_INVALID_VALUE */);
+              return;
+          }
+          if (HEAPU8.length <= 2147483648) {
+              size && GLctx.getBufferSubData(target, offset, HEAPU8, data, size);
+          } else {
+              size && GLctx.getBufferSubData(target, offset, HEAPU8.subarray((data), (data+size)));
+          }
       }
-      size && GLctx.getBufferSubData(target, offset, HEAPU8, data, size);
-    }
 
   function _glGetError() {
       var error = GLctx.getError() || GL.lastError;
@@ -14693,22 +14794,22 @@ var ASM_CONSTS = {
   
   
   function _glReadPixels(x, y, width, height, format, type, pixels) {
-      if (GL.currentContext.version >= 2) { // WebGL 2 provides new garbage-free entry points to call to WebGL. Use those always when possible.
-        if (GLctx.currentPixelPackBufferBinding) {
-          GLctx.readPixels(x, y, width, height, format, type, pixels);
-        } else {
-          var heap = heapObjectForWebGLType(type);
-          GLctx.readPixels(x, y, width, height, format, type, heap, (pixels >> (heapAccessShiftForWebGLHeap(heap))));
-        }
-        return;
+          if (GLctx.currentPixelPackBufferBinding) {
+              GLctx.readPixels(x, y, width, height, format, type, pixels);
+          } else if (HEAPU8.length <= 2147483648) {
+              // WebGL 2 provides new garbage-free entry points to call to WebGL. Use those always when possible.
+              var heap = heapObjectForWebGLType(type);
+              GLctx.readPixels(x, y, width, height, format, type, heap, (pixels >> (heapAccessShiftForWebGLHeap(heap))));
+          } else {
+              // WORKAROUND: Create view of heap region smaller than 2 GB
+              var pixelData = emscriptenWebGLGetTexPixelData(type, format, width, height, pixels, format);
+              if (!pixelData) {
+                  GL.recordError(0x500/*GL_INVALID_ENUM*/);
+                  return;
+              }
+              GLctx.readPixels(x, y, width, height, format, type, pixelData);
+          }
       }
-      var pixelData = emscriptenWebGLGetTexPixelData(type, format, width, height, pixels, format);
-      if (!pixelData) {
-        GL.recordError(0x500/*GL_INVALID_ENUM*/);
-        return;
-      }
-      GLctx.readPixels(x, y, width, height, format, type, pixelData);
-    }
 
   function _glRenderbufferStorage(x0, x1, x2, x3) { GLctx.renderbufferStorage(x0, x1, x2, x3) }
 
@@ -15087,34 +15188,57 @@ var ASM_CONSTS = {
 
   
   
-  
   function _glTexImage2D(target, level, internalFormat, width, height, border, format, type, pixels) {
-      if (GL.currentContext.version >= 2) {
-        // WebGL 2 provides new garbage-free entry points to call to WebGL. Use those always when possible.
-        if (GLctx.currentPixelUnpackBufferBinding) {
-          GLctx.texImage2D(target, level, internalFormat, width, height, border, format, type, pixels);
-        } else if (pixels) {
-          var heap = heapObjectForWebGLType(type);
-          GLctx.texImage2D(target, level, internalFormat, width, height, border, format, type, heap, (pixels >> (heapAccessShiftForWebGLHeap(heap))));
-        } else {
-          GLctx.texImage2D(target, level, internalFormat, width, height, border, format, type, null);
-        }
-        return;
+          if (GLctx.currentPixelUnpackBufferBinding) {
+              GLctx.texImage2D(target, level, internalFormat, width, height, border, format, type, pixels);
+          } else if (pixels) {
+              if (HEAPU8.length <= 2147483648) {
+                  var heap = heapObjectForWebGLType(type);
+                  GLctx.texImage2D(target, level, internalFormat, width, height, border, format, type, heap, (pixels >> (heapAccessShiftForWebGLHeap(heap))));
+              } else {
+                  // WORKAROUND: Create view of heap region smaller than 2 GB
+                  GLctx.texImage2D(target, level, internalFormat, width, height, border, format, type, emscriptenWebGLGetTexPixelData(type, format, width, height, pixels, internalFormat));
+              }
+          } else {
+              GLctx.texImage2D(target, level, internalFormat, width, height, border, format, type, null);
+          }
       }
-      GLctx.texImage2D(target, level, internalFormat, width, height, border, format, type, pixels ? emscriptenWebGLGetTexPixelData(type, format, width, height, pixels, internalFormat) : null);
-    }
 
+  function computeUnpackAlignedImageSize3D(width, height, depth, sizePerPixel, alignment) {
+          function roundedToNextMultipleOf(x, y) {
+            return (x + y - 1) & -y;
+          }
+          var plainRowSize = width * sizePerPixel;
+          var alignedRowSize = roundedToNextMultipleOf(plainRowSize, alignment);
+          return depth * height * alignedRowSize;
+      }
+  
+  
+  
+  function emscriptenWebGLGetTexPixelData3D(type, format, width, height, depth, pixels, internalFormat) {
+          var heap = heapObjectForWebGLType(type);
+          var shift = heapAccessShiftForWebGLHeap(heap);
+          var sizePerPixel = colorChannelsInGlTextureFormat(format) << shift;
+          var bytes = (computeUnpackAlignedImageSize3D(width, height, depth, sizePerPixel, GL.unpackAlignment));
+          return heap.subarray((pixels >> shift), ((pixels + bytes) >> shift));
+      }
+  
   
   function _glTexImage3D(target, level, internalFormat, width, height, depth, border, format, type, pixels) {
-      if (GLctx.currentPixelUnpackBufferBinding) {
-        GLctx.texImage3D(target, level, internalFormat, width, height, depth, border, format, type, pixels);
-      } else if (pixels) {
-        var heap = heapObjectForWebGLType(type);
-        GLctx.texImage3D(target, level, internalFormat, width, height, depth, border, format, type, heap, (pixels >> (heapAccessShiftForWebGLHeap(heap))));
-      } else {
-        GLctx.texImage3D(target, level, internalFormat, width, height, depth, border, format, type, null);
+          if (GLctx.currentPixelUnpackBufferBinding) {
+              GLctx.texImage3D(target, level, internalFormat, width, height, depth, border, format, type, pixels);
+          } else if (pixels) {
+              if (HEAPU8.length <= 2147483648) {
+                  var heap = heapObjectForWebGLType(type);
+                  GLctx.texImage3D(target, level, internalFormat, width, height, depth, border, format, type, heap, (pixels >> (heapAccessShiftForWebGLHeap(heap))));
+              } else {
+                  // WORKAROUND: Create view of heap region smaller than 2 GB
+                  GLctx.texImage3D(target, level, internalFormat, width, height, depth, border, format, type, emscriptenWebGLGetTexPixelData3D(type, format, width, height, depth, pixels, internalFormat));
+              }
+          } else {
+              GLctx.texImage3D(target, level, internalFormat, width, height, depth, border, format, type, null);
+          }
       }
-    }
 
   function _glTexParameterf(x0, x1, x2) { GLctx.texParameterf(x0, x1, x2) }
 
@@ -15131,59 +15255,55 @@ var ASM_CONSTS = {
 
   
   
-  
   function _glTexSubImage2D(target, level, xoffset, yoffset, width, height, format, type, pixels) {
-      if (GL.currentContext.version >= 2) {
-        // WebGL 2 provides new garbage-free entry points to call to WebGL. Use those always when possible.
-        if (GLctx.currentPixelUnpackBufferBinding) {
-          GLctx.texSubImage2D(target, level, xoffset, yoffset, width, height, format, type, pixels);
-        } else if (pixels) {
-          var heap = heapObjectForWebGLType(type);
-          GLctx.texSubImage2D(target, level, xoffset, yoffset, width, height, format, type, heap, (pixels >> (heapAccessShiftForWebGLHeap(heap))));
-        } else {
-          GLctx.texSubImage2D(target, level, xoffset, yoffset, width, height, format, type, null);
-        }
-        return;
+          if (GLctx.currentPixelUnpackBufferBinding) {
+              GLctx.texSubImage2D(target, level, xoffset, yoffset, width, height, format, type, pixels);
+          } else if (pixels) {
+              if (HEAPU8.length <= 2147483648) {
+                  var heap = heapObjectForWebGLType(type);
+                  GLctx.texSubImage2D(target, level, xoffset, yoffset, width, height, format, type, heap, (pixels >> (heapAccessShiftForWebGLHeap(heap))));
+              } else {
+                  // WORKAROUND: Create view of heap region smaller than 2 GB
+                  GLctx.texSubImage2D(target, level, xoffset, yoffset, width, height, format, type, emscriptenWebGLGetTexPixelData(type, format, width, height, pixels, 0));
+              }
+          } else {
+              GLctx.texSubImage2D(target, level, xoffset, yoffset, width, height, format, type, null);
+          }
       }
-      var pixelData = null;
-      if (pixels) pixelData = emscriptenWebGLGetTexPixelData(type, format, width, height, pixels, 0);
-      GLctx.texSubImage2D(target, level, xoffset, yoffset, width, height, format, type, pixelData);
-    }
 
   
+  
   function _glTexSubImage3D(target, level, xoffset, yoffset, zoffset, width, height, depth, format, type, pixels) {
-      if (GLctx.currentPixelUnpackBufferBinding) {
-        GLctx.texSubImage3D(target, level, xoffset, yoffset, zoffset, width, height, depth, format, type, pixels);
-      } else if (pixels) {
-        var heap = heapObjectForWebGLType(type);
-        GLctx.texSubImage3D(target, level, xoffset, yoffset, zoffset, width, height, depth, format, type, heap, (pixels >> (heapAccessShiftForWebGLHeap(heap))));
-      } else {
-        GLctx.texSubImage3D(target, level, xoffset, yoffset, zoffset, width, height, depth, format, type, null);
+          if (GLctx.currentPixelUnpackBufferBinding) {
+              GLctx.texSubImage3D(target, level, xoffset, yoffset, zoffset, width, height, depth, format, type, pixels);
+          } else if (pixels) {
+              if (HEAPU8.length <= 2147483648) {
+                  var heap = heapObjectForWebGLType(type);
+                  GLctx.texSubImage3D(target, level, xoffset, yoffset, zoffset, width, height, depth, format, type, heap, (pixels >> (heapAccessShiftForWebGLHeap(heap))));
+              } else {
+                  // WORKAROUND: Create view of heap region smaller than 2 GB
+                  GLctx.texSubImage3D(target, level, xoffset, yoffset, zoffset, width, height, depth, format, type, emscriptenWebGLGetTexPixelData3D(type, format, width, height, depth, pixels, 0));
+              }
+          } else {
+              GLctx.texSubImage3D(target, level, xoffset, yoffset, zoffset, width, height, depth, format, type, null);
+          }
       }
-    }
 
   
   var miniTempWebGLFloatBuffers = [];
-  
   function _glUniform1fv(location, count, value) {
   
-      if (GL.currentContext.version >= 2) { // WebGL 2 provides new garbage-free entry points to call to WebGL. Use those always when possible.
-        count && GLctx.uniform1fv(webglGetUniformLocation(location), HEAPF32, (value >> 2), count);
-        return;
+          if (count <= 288) {
+              // avoid allocation when uploading few enough uniforms
+              var view = miniTempWebGLFloatBuffers[count-1];
+              for (var i = 0; i < count; ++i) {
+                  view[i] = HEAPF32[(((value)+(4*i))>>2)];
+              }
+          } else {
+              var view = HEAPF32.subarray((value)>>2, (value+count*4)>>2);
+          }
+          GLctx.uniform1fv(webglGetUniformLocation(location), view);
       }
-  
-      if (count <= 288) {
-        // avoid allocation when uploading few enough uniforms
-        var view = miniTempWebGLFloatBuffers[count-1];
-        for (var i = 0; i < count; ++i) {
-          view[i] = HEAPF32[(((value)+(4*i))>>2)];
-        }
-      } else
-      {
-        var view = HEAPF32.subarray((value)>>2, (value+count*4)>>2);
-      }
-      GLctx.uniform1fv(webglGetUniformLocation(location), view);
-    }
 
   
   function _glUniform1i(location, v0) {
@@ -15192,189 +15312,192 @@ var ASM_CONSTS = {
 
   
   var miniTempWebGLIntBuffers = [];
-  
   function _glUniform1iv(location, count, value) {
   
-      if (GL.currentContext.version >= 2) { // WebGL 2 provides new garbage-free entry points to call to WebGL. Use those always when possible.
-        count && GLctx.uniform1iv(webglGetUniformLocation(location), HEAP32, (value >> 2), count);
-        return;
+          if (count <= 288) {
+              // avoid allocation when uploading few enough uniforms
+              var view = miniTempWebGLIntBuffers[count-1];
+              for (var i = 0; i < count; ++i) {
+                  view[i] = HEAP32[(((value)+(4*i))>>2)];
+              }
+          } else {
+              var view = HEAP32.subarray((value)>>2, (value+count*4)>>2);
+          }
+          GLctx.uniform1iv(webglGetUniformLocation(location), view);
       }
-  
-      if (count <= 288) {
-        // avoid allocation when uploading few enough uniforms
-        var view = miniTempWebGLIntBuffers[count-1];
-        for (var i = 0; i < count; ++i) {
-          view[i] = HEAP32[(((value)+(4*i))>>2)];
-        }
-      } else
-      {
-        var view = HEAP32.subarray((value)>>2, (value+count*4)>>2);
-      }
-      GLctx.uniform1iv(webglGetUniformLocation(location), view);
-    }
 
+  
+  var miniTempWebGLUIntBuffers = [];
   function _glUniform1uiv(location, count, value) {
-      count && GLctx.uniform1uiv(webglGetUniformLocation(location), HEAPU32, (value >> 2), count);
-    }
-
   
+          if (count <= 288) {
+              // avoid allocation when uploading few enough uniforms
+              var view = miniTempWebGLUIntBuffers[count-1];
+              for (var i = 0; i < count; ++i) {
+                  view[i] = HEAPU32[(((value)+(4*i))>>2)];
+              }
+          } else {
+              var view = HEAPU32.subarray((value)>>2, (value+count*4)>>2);
+          }
+          GLctx.uniform1uiv(webglGetUniformLocation(location), view);
+      }
+
   
   function _glUniform2fv(location, count, value) {
   
-      if (GL.currentContext.version >= 2) { // WebGL 2 provides new garbage-free entry points to call to WebGL. Use those always when possible.
-        count && GLctx.uniform2fv(webglGetUniformLocation(location), HEAPF32, (value >> 2), count*2);
-        return;
+          if (count <= 144) {
+              // avoid allocation when uploading few enough uniforms
+              var view = miniTempWebGLFloatBuffers[2*count-1];
+              for (var i = 0; i < 2*count; i += 2) {
+                  view[i] = HEAPF32[(((value)+(4*i))>>2)];
+                  view[i+1] = HEAPF32[(((value)+(4*i+4))>>2)];
+              }
+          } else {
+              var view = HEAPF32.subarray((value)>>2, (value+count*8)>>2);
+          }
+          GLctx.uniform2fv(webglGetUniformLocation(location), view);
       }
-  
-      if (count <= 144) {
-        // avoid allocation when uploading few enough uniforms
-        var view = miniTempWebGLFloatBuffers[2*count-1];
-        for (var i = 0; i < 2*count; i += 2) {
-          view[i] = HEAPF32[(((value)+(4*i))>>2)];
-          view[i+1] = HEAPF32[(((value)+(4*i+4))>>2)];
-        }
-      } else
-      {
-        var view = HEAPF32.subarray((value)>>2, (value+count*8)>>2);
-      }
-      GLctx.uniform2fv(webglGetUniformLocation(location), view);
-    }
 
-  
   
   function _glUniform2iv(location, count, value) {
   
-      if (GL.currentContext.version >= 2) { // WebGL 2 provides new garbage-free entry points to call to WebGL. Use those always when possible.
-        count && GLctx.uniform2iv(webglGetUniformLocation(location), HEAP32, (value >> 2), count*2);
-        return;
+          if (count <= 144) {
+              // avoid allocation when uploading few enough uniforms
+              var view = miniTempWebGLIntBuffers[2*count-1];
+              for (var i = 0; i < 2*count; i += 2) {
+                  view[i] = HEAP32[(((value)+(4*i))>>2)];
+                  view[i+1] = HEAP32[(((value)+(4*i+4))>>2)];
+              }
+          } else {
+              var view = HEAP32.subarray((value)>>2, (value+count*8)>>2);
+          }
+          GLctx.uniform2iv(webglGetUniformLocation(location), view);
       }
-  
-      if (count <= 144) {
-        // avoid allocation when uploading few enough uniforms
-        var view = miniTempWebGLIntBuffers[2*count-1];
-        for (var i = 0; i < 2*count; i += 2) {
-          view[i] = HEAP32[(((value)+(4*i))>>2)];
-          view[i+1] = HEAP32[(((value)+(4*i+4))>>2)];
-        }
-      } else
-      {
-        var view = HEAP32.subarray((value)>>2, (value+count*8)>>2);
-      }
-      GLctx.uniform2iv(webglGetUniformLocation(location), view);
-    }
 
+  
   function _glUniform2uiv(location, count, value) {
-      count && GLctx.uniform2uiv(webglGetUniformLocation(location), HEAPU32, (value >> 2), count*2);
-    }
+          if (count <= 144) {
+              // avoid allocation when uploading few enough uniforms
+              var view = miniTempWebGLUIntBuffers[2*count-1];
+              for (var i = 0; i < 2*count; i += 2) {
+                  view[i] = HEAPU32[(((value)+(4*i))>>2)];
+                  view[i+1] = HEAPU32[(((value)+(4*i+4))>>2)];
+              }
+          } else {
+              var view = HEAPU32.subarray((value)>>2, (value+count*8)>>2);
+          }
+          GLctx.uniform2uiv(webglGetUniformLocation(location), view);
+      }
 
-  
   
   function _glUniform3fv(location, count, value) {
   
-      if (GL.currentContext.version >= 2) { // WebGL 2 provides new garbage-free entry points to call to WebGL. Use those always when possible.
-        count && GLctx.uniform3fv(webglGetUniformLocation(location), HEAPF32, (value >> 2), count*3);
-        return;
+          if (count <= 96) {
+              // avoid allocation when uploading few enough uniforms
+              var view = miniTempWebGLFloatBuffers[3*count-1];
+              for (var i = 0; i < 3*count; i += 3) {
+                  view[i] = HEAPF32[(((value)+(4*i))>>2)];
+                  view[i+1] = HEAPF32[(((value)+(4*i+4))>>2)];
+                  view[i+2] = HEAPF32[(((value)+(4*i+8))>>2)];
+              }
+          } else {
+              var view = HEAPF32.subarray((value)>>2, (value+count*12)>>2);
+          }
+          GLctx.uniform3fv(webglGetUniformLocation(location), view);
       }
-  
-      if (count <= 96) {
-        // avoid allocation when uploading few enough uniforms
-        var view = miniTempWebGLFloatBuffers[3*count-1];
-        for (var i = 0; i < 3*count; i += 3) {
-          view[i] = HEAPF32[(((value)+(4*i))>>2)];
-          view[i+1] = HEAPF32[(((value)+(4*i+4))>>2)];
-          view[i+2] = HEAPF32[(((value)+(4*i+8))>>2)];
-        }
-      } else
-      {
-        var view = HEAPF32.subarray((value)>>2, (value+count*12)>>2);
-      }
-      GLctx.uniform3fv(webglGetUniformLocation(location), view);
-    }
 
-  
   
   function _glUniform3iv(location, count, value) {
   
-      if (GL.currentContext.version >= 2) { // WebGL 2 provides new garbage-free entry points to call to WebGL. Use those always when possible.
-        count && GLctx.uniform3iv(webglGetUniformLocation(location), HEAP32, (value >> 2), count*3);
-        return;
+          if (count <= 96) {
+              // avoid allocation when uploading few enough uniforms
+              var view = miniTempWebGLIntBuffers[3*count-1];
+              for (var i = 0; i < 3*count; i += 3) {
+                  view[i] = HEAP32[(((value)+(4*i))>>2)];
+                  view[i+1] = HEAP32[(((value)+(4*i+4))>>2)];
+                  view[i+2] = HEAP32[(((value)+(4*i+8))>>2)];
+              }
+          } else {
+              var view = HEAP32.subarray((value)>>2, (value+count*12)>>2);
+          }
+          GLctx.uniform3iv(webglGetUniformLocation(location), view);
       }
-  
-      if (count <= 96) {
-        // avoid allocation when uploading few enough uniforms
-        var view = miniTempWebGLIntBuffers[3*count-1];
-        for (var i = 0; i < 3*count; i += 3) {
-          view[i] = HEAP32[(((value)+(4*i))>>2)];
-          view[i+1] = HEAP32[(((value)+(4*i+4))>>2)];
-          view[i+2] = HEAP32[(((value)+(4*i+8))>>2)];
-        }
-      } else
-      {
-        var view = HEAP32.subarray((value)>>2, (value+count*12)>>2);
-      }
-      GLctx.uniform3iv(webglGetUniformLocation(location), view);
-    }
 
+  
   function _glUniform3uiv(location, count, value) {
-      count && GLctx.uniform3uiv(webglGetUniformLocation(location), HEAPU32, (value >> 2), count*3);
-    }
-
   
+          if (count <= 96) {
+              // avoid allocation when uploading few enough uniforms
+              var view = miniTempWebGLUIntBuffers[3*count-1];
+              for (var i = 0; i < 3*count; i += 3) {
+                  view[i] = HEAPU32[(((value)+(4*i))>>2)];
+                  view[i+1] = HEAPU32[(((value)+(4*i+4))>>2)];
+                  view[i+2] = HEAPU32[(((value)+(4*i+8))>>2)];
+              }
+          } else {
+              var view = HEAPU32.subarray((value)>>2, (value+count*12)>>2);
+          }
+          GLctx.uniform3uiv(webglGetUniformLocation(location), view);
+      }
+
   
   function _glUniform4fv(location, count, value) {
   
-      if (GL.currentContext.version >= 2) { // WebGL 2 provides new garbage-free entry points to call to WebGL. Use those always when possible.
-        count && GLctx.uniform4fv(webglGetUniformLocation(location), HEAPF32, (value >> 2), count*4);
-        return;
+          if (count <= 72) {
+              // avoid allocation when uploading few enough uniforms
+              var view = miniTempWebGLFloatBuffers[4*count-1];
+              // hoist the heap out of the loop for pthreads+growth.
+              var heap = HEAPF32;
+              value = (value >> 2);
+              for (var i = 0; i < 4 * count; i += 4) {
+                  view[i] = heap[value++];
+                  view[i + 1] = heap[value++];
+                  view[i + 2] = heap[value++];
+                  view[i + 3] = heap[value++];
+              }
+          } else {
+              var view = HEAPF32.subarray((value)>>2, (value+count*16)>>2);
+          }
+          GLctx.uniform4fv(webglGetUniformLocation(location), view);
       }
-  
-      if (count <= 72) {
-        // avoid allocation when uploading few enough uniforms
-        var view = miniTempWebGLFloatBuffers[4*count-1];
-        // hoist the heap out of the loop for pthreads+growth.
-        var heap = HEAPF32;
-        value = (value >> 2);
-        for (var i = 0; i < 4 * count; i += 4) {
-          view[i] = heap[value++];
-          view[i + 1] = heap[value++];
-          view[i + 2] = heap[value++];
-          view[i + 3] = heap[value++];
-        }
-      } else
-      {
-        var view = HEAPF32.subarray((value)>>2, (value+count*16)>>2);
-      }
-      GLctx.uniform4fv(webglGetUniformLocation(location), view);
-    }
 
-  
   
   function _glUniform4iv(location, count, value) {
   
-      if (GL.currentContext.version >= 2) { // WebGL 2 provides new garbage-free entry points to call to WebGL. Use those always when possible.
-        count && GLctx.uniform4iv(webglGetUniformLocation(location), HEAP32, (value >> 2), count*4);
-        return;
-      }
+          if (count <= 72) {
+              // avoid allocation when uploading few enough uniforms
+              var view = miniTempWebGLIntBuffers[4*count-1];
+              for (var i = 0; i < 4*count; i += 4) {
+                  view[i] = HEAP32[(((value)+(4*i))>>2)];
+                  view[i+1] = HEAP32[(((value)+(4*i+4))>>2)];
+                  view[i+2] = HEAP32[(((value)+(4*i+8))>>2)];
+                  view[i+3] = HEAP32[(((value)+(4*i+12))>>2)];
+              }
+          } else {
+              var view = HEAP32.subarray((value)>>2, (value+count*16)>>2);
   
-      if (count <= 72) {
-        // avoid allocation when uploading few enough uniforms
-        var view = miniTempWebGLIntBuffers[4*count-1];
-        for (var i = 0; i < 4*count; i += 4) {
-          view[i] = HEAP32[(((value)+(4*i))>>2)];
-          view[i+1] = HEAP32[(((value)+(4*i+4))>>2)];
-          view[i+2] = HEAP32[(((value)+(4*i+8))>>2)];
-          view[i+3] = HEAP32[(((value)+(4*i+12))>>2)];
-        }
-      } else
-      {
-        var view = HEAP32.subarray((value)>>2, (value+count*16)>>2);
+          }
+          GLctx.uniform4iv(webglGetUniformLocation(location), view);
       }
-      GLctx.uniform4iv(webglGetUniformLocation(location), view);
-    }
 
+  
   function _glUniform4uiv(location, count, value) {
-      count && GLctx.uniform4uiv(webglGetUniformLocation(location), HEAPU32, (value >> 2), count*4);
-    }
+  
+          if (count <= 72) {
+              // avoid allocation when uploading few enough uniforms
+              var view = miniTempWebGLUIntBuffers[4*count-1];
+              for (var i = 0; i < 4*count; i += 4) {
+                  view[i] = HEAPU32[(((value)+(4*i))>>2)];
+                  view[i+1] = HEAPU32[(((value)+(4*i+4))>>2)];
+                  view[i+2] = HEAPU32[(((value)+(4*i+8))>>2)];
+                  view[i+3] = HEAPU32[(((value)+(4*i+12))>>2)];
+              }
+          } else {
+              var view = HEAPU32.subarray((value)>>2, (value+count*16)>>2);
+  
+          }
+          GLctx.uniform4uiv(webglGetUniformLocation(location), view);
+      }
 
   function _glUniformBlockBinding(program, uniformBlockIndex, uniformBlockBinding) {
       program = GL.programs[program];
@@ -15383,103 +15506,88 @@ var ASM_CONSTS = {
     }
 
   
-  
   function _glUniformMatrix3fv(location, count, transpose, value) {
   
-      if (GL.currentContext.version >= 2) { // WebGL 2 provides new garbage-free entry points to call to WebGL. Use those always when possible.
-        count && GLctx.uniformMatrix3fv(webglGetUniformLocation(location), !!transpose, HEAPF32, (value >> 2), count*9);
-        return;
+          if (count <= 32) {
+              // avoid allocation when uploading few enough uniforms
+              var view = miniTempWebGLFloatBuffers[9*count-1];
+              for (var i = 0; i < 9*count; i += 9) {
+                  view[i] = HEAPF32[(((value)+(4*i))>>2)];
+                  view[i+1] = HEAPF32[(((value)+(4*i+4))>>2)];
+                  view[i+2] = HEAPF32[(((value)+(4*i+8))>>2)];
+                  view[i+3] = HEAPF32[(((value)+(4*i+12))>>2)];
+                  view[i+4] = HEAPF32[(((value)+(4*i+16))>>2)];
+                  view[i+5] = HEAPF32[(((value)+(4*i+20))>>2)];
+                  view[i+6] = HEAPF32[(((value)+(4*i+24))>>2)];
+                  view[i+7] = HEAPF32[(((value)+(4*i+28))>>2)];
+                  view[i+8] = HEAPF32[(((value)+(4*i+32))>>2)];
+              }
+          } else {
+              var view = HEAPF32.subarray((value)>>2, (value+count*36)>>2);
+          }
+          GLctx.uniformMatrix3fv(webglGetUniformLocation(location), !!transpose, view);
       }
-  
-      if (count <= 32) {
-        // avoid allocation when uploading few enough uniforms
-        var view = miniTempWebGLFloatBuffers[9*count-1];
-        for (var i = 0; i < 9*count; i += 9) {
-          view[i] = HEAPF32[(((value)+(4*i))>>2)];
-          view[i+1] = HEAPF32[(((value)+(4*i+4))>>2)];
-          view[i+2] = HEAPF32[(((value)+(4*i+8))>>2)];
-          view[i+3] = HEAPF32[(((value)+(4*i+12))>>2)];
-          view[i+4] = HEAPF32[(((value)+(4*i+16))>>2)];
-          view[i+5] = HEAPF32[(((value)+(4*i+20))>>2)];
-          view[i+6] = HEAPF32[(((value)+(4*i+24))>>2)];
-          view[i+7] = HEAPF32[(((value)+(4*i+28))>>2)];
-          view[i+8] = HEAPF32[(((value)+(4*i+32))>>2)];
-        }
-      } else
-      {
-        var view = HEAPF32.subarray((value)>>2, (value+count*36)>>2);
-      }
-      GLctx.uniformMatrix3fv(webglGetUniformLocation(location), !!transpose, view);
-    }
 
-  
   
   function _glUniformMatrix4fv(location, count, transpose, value) {
   
-      if (GL.currentContext.version >= 2) { // WebGL 2 provides new garbage-free entry points to call to WebGL. Use those always when possible.
-        count && GLctx.uniformMatrix4fv(webglGetUniformLocation(location), !!transpose, HEAPF32, (value >> 2), count*16);
-        return;
+          if (count <= 18) {
+              // avoid allocation when uploading few enough uniforms
+              var view = miniTempWebGLFloatBuffers[16*count-1];
+              // hoist the heap out of the loop for pthreads+growth.
+              var heap = HEAPF32;
+              value = (value >> 2);
+              for (var i = 0; i < 16 * count; i += 16) {
+                  view[i] = heap[value++];
+                  view[i + 1] = heap[value++];
+                  view[i + 2] = heap[value++];
+                  view[i + 3] = heap[value++];
+                  view[i + 4] = heap[value++];
+                  view[i + 5] = heap[value++];
+                  view[i + 6] = heap[value++];
+                  view[i + 7] = heap[value++];
+                  view[i + 8] = heap[value++];
+                  view[i + 9] = heap[value++];
+                  view[i + 10] = heap[value++];
+                  view[i + 11] = heap[value++];
+                  view[i + 12] = heap[value++];
+                  view[i + 13] = heap[value++];
+                  view[i + 14] = heap[value++];
+                  view[i + 15] = heap[value++];
+              }
+          } else {
+              var view = HEAPF32.subarray((value)>>2, (value+count*64)>>2);
+          }
+          GLctx.uniformMatrix4fv(webglGetUniformLocation(location), !!transpose, view);
       }
-  
-      if (count <= 18) {
-        // avoid allocation when uploading few enough uniforms
-        var view = miniTempWebGLFloatBuffers[16*count-1];
-        // hoist the heap out of the loop for pthreads+growth.
-        var heap = HEAPF32;
-        value = (value >> 2);
-        for (var i = 0; i < 16 * count; i += 16) {
-          view[i] = heap[value++];
-          view[i + 1] = heap[value++];
-          view[i + 2] = heap[value++];
-          view[i + 3] = heap[value++];
-          view[i + 4] = heap[value++];
-          view[i + 5] = heap[value++];
-          view[i + 6] = heap[value++];
-          view[i + 7] = heap[value++];
-          view[i + 8] = heap[value++];
-          view[i + 9] = heap[value++];
-          view[i + 10] = heap[value++];
-          view[i + 11] = heap[value++];
-          view[i + 12] = heap[value++];
-          view[i + 13] = heap[value++];
-          view[i + 14] = heap[value++];
-          view[i + 15] = heap[value++];
-        }
-      } else
-      {
-        var view = HEAPF32.subarray((value)>>2, (value+count*64)>>2);
-      }
-      GLctx.uniformMatrix4fv(webglGetUniformLocation(location), !!transpose, view);
-    }
 
   
   
-  
   function _glUnmapBuffer(target) {
-      if (!emscriptenWebGLValidateMapBufferTarget(target)) {
-        GL.recordError(0x500/*GL_INVALID_ENUM*/);
-        err('GL_INVALID_ENUM in glUnmapBuffer');
-        return 0;
-      }
+          if (!emscriptenWebGLValidateMapBufferTarget(target)) {
+              GL.recordError(0x500/*GL_INVALID_ENUM*/);
+              err('GL_INVALID_ENUM in glUnmapBuffer');
+              return 0;
+          }
   
-      var buffer = emscriptenWebGLGetBufferBinding(target);
-      var mapping = GL.mappedBuffers[buffer];
-      if (!mapping) {
-        GL.recordError(0x502 /* GL_INVALID_OPERATION */);
-        err('buffer was never mapped in glUnmapBuffer');
-        return 0;
-      }
-      GL.mappedBuffers[buffer] = null;
+          var buffer = emscriptenWebGLGetBufferBinding(target);
+          var mapping = GL.mappedBuffers[buffer];
+          if (!mapping) {
+              GL.recordError(0x502 /* GL_INVALID_OPERATION */);
+              err('buffer was never mapped in glUnmapBuffer');
+              return 0;
+          }
+          GL.mappedBuffers[buffer] = null;
   
-      if (!(mapping.access & 0x10)) /* GL_MAP_FLUSH_EXPLICIT_BIT */
-        if (GL.currentContext.version >= 2) { // WebGL 2 provides new garbage-free entry points to call to WebGL. Use those always when possible.
-          GLctx.bufferSubData(target, mapping.offset, HEAPU8, mapping.mem, mapping.length);
-        } else {
-          GLctx.bufferSubData(target, mapping.offset, HEAPU8.subarray(mapping.mem, mapping.mem+mapping.length));
-        }
-      _free(mapping.mem);
-      return 1;
-    }
+          if (!(mapping.access & 0x10)) /* GL_MAP_FLUSH_EXPLICIT_BIT */
+              if (GL.currentContext.version >= 2 && HEAPU8.length <= 2147483648) { // WebGL 2 provides new garbage-free entry points to call to WebGL. Use those always when possible.
+                  GLctx.bufferSubData(target, mapping.offset, HEAPU8, mapping.mem, mapping.length);
+              } else {
+                  GLctx.bufferSubData(target, mapping.offset, HEAPU8.subarray((mapping.mem), (mapping.mem+mapping.length)));
+              }
+          _free(mapping.mem);
+          return 1;
+      }
 
   function webglApplyExplicitProgramBindings() {
       var p = GLctx.currentProgram;
@@ -15526,22 +15634,22 @@ var ASM_CONSTS = {
     }
 
   function _glVertexAttribIPointer(index, size, type, stride, ptr) {
-      var cb = GL.currentContext.clientBuffers[index];
-      if (!GLctx.currentArrayBufferBinding) {
-        cb.size = size;
-        cb.type = type;
-        cb.normalized = false;
-        cb.stride = stride;
-        cb.ptr = ptr;
-        cb.clientside = true;
-        cb.vertexAttribPointerAdaptor = function(index, size, type, normalized, stride, ptr) {
-          this.vertexAttribIPointer(index, size, type, stride, ptr);
-        };
-        return;
+          var cb = GL.currentContext.clientBuffers[index];
+          if (!GLctx.currentArrayBufferBinding) {
+              cb.size = size;
+              cb.type = type;
+              cb.normalized = false;
+              cb.stride = stride;
+              cb.ptr = ptr;
+              cb.clientside = true;
+              cb.vertexAttribPointerAdaptor = function(index, size, type, normalized, stride, ptr) {
+                  this.vertexAttribIPointer(index, size, type, stride, ptr);
+              };
+              return;
+          }
+          cb.clientside = false;
+          GLctx.vertexAttribIPointer(index, size, type, stride, ptr);
       }
-      cb.clientside = false;
-      GLctx.vertexAttribIPointer(index, size, type, stride, ptr);
-    }
 
   function _glVertexAttribPointer(index, size, type, normalized, stride, ptr) {
       var cb = GL.currentContext.clientBuffers[index];
@@ -16150,7 +16258,7 @@ var ASM_CONSTS = {
   
       // N.b. this generates garbage because JavaScript does not allow ArrayBufferView.set(ArrayBuffer, offset, size, dst)
       // but must create a dummy view.
-      HEAPU8.set(new Uint8Array(wgpu[gpuBuffer].mappedRanges[startOffset], subOffset, size), dst);
+      HEAPU8.set(new Uint8Array(wgpu[gpuBuffer].mappedRanges[startOffset], subOffset, size), wgpu_checked_shift(dst, 0) );
     }
 
   function _wgpu_buffer_unmap(gpuBuffer) {
@@ -16296,9 +16404,9 @@ var ASM_CONSTS = {
       assert((descriptor >> 2) << 2 == descriptor);
   descriptor >>= 2;
   
-      let desc = {
+      let desc = descriptor ? {
         'timestampWrites': wgpuReadTimestampWrites(descriptor)
-      };
+      } : void 0;
   
       
       return wgpuStore(commandEncoder['beginComputePass'](desc));
@@ -16371,7 +16479,7 @@ var ASM_CONSTS = {
         // If maxDrawCount is set to zero, pass in undefined to use the default value
         // (likely 50 million, but omit it in case the spec might change in the future)
         'maxDrawCount': maxDrawCount || void 0,
-        'timestampWrites': wgpuReadTimestampWrites(descriptor+15) // 14 + 1==sizeof(WGpuQuerySet) + 1
+        'timestampWrites': wgpuReadTimestampWrites(descriptor+15) // 5 + 9==sizeof(WGpuRenderPassDepthStencilAttachment) + 1==sizeof(WGpuQuerySet)
       };
       ;
       return wgpuStore(wgpu[commandEncoder]['beginRenderPass'](desc));
@@ -16780,16 +16888,16 @@ var ASM_CONSTS = {
         'vertex': {
           'module': wgpu[HEAPU32[vertexIdx+6]],
           // If null pointer was passed to use the default entry point name, then utf8() would return '', but spec requires undefined.
-          'entryPoint': utf8(HEAPU32[vertexIdx]) || void 0,
+          'entryPoint': utf8(HEAPU32[vertexIdx ]) || void 0,
           'buffers': vertexBuffers,
-          'constants': wgpuReadConstants(HEAPU32[vertexIdx+4  >> 2], HEAP32[vertexIdx+8])
+          'constants': wgpuReadConstants(HEAPU32[vertexIdx+4 ], HEAP32[vertexIdx+8])
         },
         'fragment': fragmentModule ? {
           'module': wgpu[fragmentModule],
           // If null pointer was passed to use the default entry point name, then utf8() would return '', but spec requires undefined.
-          'entryPoint': utf8(HEAPU32[fragmentIdx]) || void 0,
+          'entryPoint': utf8(HEAPU32[fragmentIdx ]) || void 0,
           'targets': targets,
-          'constants': wgpuReadConstants(HEAPU32[fragmentIdx+4  >> 2], HEAP32[fragmentIdx+8])
+          'constants': wgpuReadConstants(HEAPU32[fragmentIdx+4 ], HEAP32[fragmentIdx+8])
         } : void 0,
         'primitive': {
           'topology': GPUPrimitiveTopologys[HEAPU32[primitiveIdx]],
@@ -16883,7 +16991,7 @@ var ASM_CONSTS = {
         assert(layout <= 1 || wgpu[layout], "assert(layout <= 1 || wgpu[layout]) failed!");
         assert(layout <= 1 || wgpu[layout] instanceof GPUPipelineLayout, "assert(layout <= 1 || wgpu[layout] instanceof GPUPipelineLayout) failed!");
         hints.push({
-          'entryPoint': utf8(HEAPU32[hintsIndex  >> 2]),
+          'entryPoint': utf8(HEAPU32[hintsIndex ]),
           'layout': layout > 1 ? wgpu[layout] : (layout ? GPUAutoLayoutMode : null)
         });
         hintsIndex += 4;
@@ -16924,7 +17032,7 @@ var ASM_CONSTS = {
   descriptor >>= 2;
       assert(HEAPU32[descriptor+8] >= 1, "assert(HEAPU32[descriptor+8] >= 1) failed!"); // 'dimension' must be one of 1d, 2d or 3d.
       assert(HEAPU32[descriptor+8] <= 3, "assert(HEAPU32[descriptor+8] <= 3) failed!"); // 'dimension' must be one of 1d, 2d or 3d.
-  
+      
       let desc = {
         'viewFormats': wgpuReadArrayOfWgpuObjects(HEAPU32[descriptor ], HEAPU32[descriptor+2]),
         'size': [HEAP32[descriptor+3], HEAP32[descriptor+4], HEAP32[descriptor+5]],
@@ -16962,6 +17070,15 @@ var ASM_CONSTS = {
       ((a1, a2, a3, a4) => dynCall_viiii.apply(null, [callback, a1, a2, a3, a4]))(device, errorCode, errorMessage, userData);
       if (stackTop) stackRestore(stackTop);
     }
+  
+  function _wgpuErrorObjectToErrorType(error) {
+      return error
+          ? (error instanceof GPUInternalError    ? 3/*WGPU_ERROR_TYPE_INTERNAL*/
+          : (error instanceof GPUValidationError  ? 2/*WGPU_ERROR_TYPE_VALIDATION*/
+          : (error instanceof GPUOutOfMemoryError ? 1/*WGPU_ERROR_TYPE_OUT_OF_MEMORY*/
+          : 3/*WGPU_ERROR_TYPE_UNKNOWN_ERROR*/)))
+          : 0/*WGPU_ERROR_TYPE_NO_ERROR*/;
+    }
   function _wgpuDispatchWebGpuErrorEvent(device, callback, error, userData) {
       // Awkward WebGPU spec: errors do not contain a data-driven error code that
       // could be used to identify the error type in a general forward compatible
@@ -16971,12 +17088,7 @@ var ASM_CONSTS = {
       // error type)
       _wgpuReportErrorCodeAndMessage(device,
         callback,
-        error
-          ? (error instanceof GPUInternalError    ? 3/*WGPU_ERROR_TYPE_INTERNAL*/
-          : (error instanceof GPUValidationError  ? 2/*WGPU_ERROR_TYPE_VALIDATION*/
-          : (error instanceof GPUOutOfMemoryError ? 1/*WGPU_ERROR_TYPE_OUT_OF_MEMORY*/
-          : 3/*WGPU_ERROR_TYPE_UNKNOWN_ERROR*/)))
-          : 0/*WGPU_ERROR_TYPE_NO_ERROR*/,
+        _wgpuErrorObjectToErrorType(error),
         error && error['message'],
         userData);
     }
@@ -17141,7 +17253,7 @@ var ASM_CONSTS = {
       assert(buffer != 0, "assert(buffer != 0) failed!");
       assert(wgpu[buffer], "assert(wgpu[buffer]) failed!");
       assert(wgpu[buffer] instanceof GPUBuffer, "assert(wgpu[buffer] instanceof GPUBuffer) failed!");
-      wgpu[queue]['writeBuffer'](wgpu[buffer], bufferOffset, HEAPU8, data, size);
+      wgpu[queue]['writeBuffer'](wgpu[buffer], bufferOffset, HEAPU8, wgpu_checked_shift(data, 0), size);
     }
 
   function _wgpu_queue_write_texture(queue, destination, data, bytesPerBlockRow, blockRowsPerImage, writeWidth, writeHeight, writeDepthOrArrayLayers) {
@@ -17150,7 +17262,7 @@ var ASM_CONSTS = {
       assert(wgpu[queue], "assert(wgpu[queue]) failed!");
       assert(wgpu[queue] instanceof GPUQueue, "assert(wgpu[queue] instanceof GPUQueue) failed!");
       assert(destination, "assert(destination) failed!");
-      wgpu[queue]['writeTexture'](wgpuReadGpuImageCopyTexture(destination), HEAPU8, { 'offset': data, 'bytesPerRow': bytesPerBlockRow, 'rowsPerImage': blockRowsPerImage }, [writeWidth, writeHeight, writeDepthOrArrayLayers]);
+      wgpu[queue]['writeTexture'](wgpuReadGpuImageCopyTexture(destination), HEAPU8, { 'offset': wgpu_checked_shift(data, 0), 'bytesPerRow': bytesPerBlockRow, 'rowsPerImage': blockRowsPerImage }, [writeWidth, writeHeight, writeDepthOrArrayLayers]);
     }
 
   function _wgpu_render_commands_mixin_draw(passEncoder, vertexCount, instanceCount, firstVertex, firstInstance) {
@@ -17559,6 +17671,11 @@ var miniTempWebGLFloatBuffersStorage = new Float32Array(288);
 var miniTempWebGLIntBuffersStorage = new Int32Array(288);
   for (/**@suppress{duplicate}*/var i = 0; i < 288; ++i) {
   miniTempWebGLIntBuffers[i] = miniTempWebGLIntBuffersStorage.subarray(0, i+1);
+  }
+  ;
+var miniTempWebGLUIntBuffersStorage = new Uint32Array(288);
+  for (/**@suppress{duplicate}*/var i = 0; i < 288; ++i) {
+  miniTempWebGLUIntBuffers[i] = miniTempWebGLUIntBuffersStorage.subarray(0, i+1);
   }
   ;
 function checkIncomingModuleAPI() {
@@ -17983,7 +18100,6 @@ var wasmImports = {
   "invoke_iidi": invoke_iidi,
   "invoke_iifi": invoke_iifi,
   "invoke_iii": invoke_iii,
-  "invoke_iiif": invoke_iiif,
   "invoke_iiifi": invoke_iiifi,
   "invoke_iiifii": invoke_iiifii,
   "invoke_iiii": invoke_iiii,
@@ -18136,6 +18252,8 @@ var wasmImports = {
 var asm = createWasm();
 /** @type {function(...*):?} */
 var ___wasm_call_ctors = createExportWrapper("__wasm_call_ctors");
+/** @type {function(...*):?} */
+var _GetFakemodTimeInSeconds = Module["_GetFakemodTimeInSeconds"] = createExportWrapper("GetFakemodTimeInSeconds");
 /** @type {function(...*):?} */
 var _ReleaseKeys = Module["_ReleaseKeys"] = createExportWrapper("ReleaseKeys");
 /** @type {function(...*):?} */
@@ -18294,61 +18412,93 @@ var dynCall_viijii = Module["dynCall_viijii"] = createExportWrapper("dynCall_vii
 /** @type {function(...*):?} */
 var dynCall_viiiii = Module["dynCall_viiiii"] = createExportWrapper("dynCall_viiiii");
 /** @type {function(...*):?} */
+var dynCall_iiiijii = Module["dynCall_iiiijii"] = createExportWrapper("dynCall_iiiijii");
+/** @type {function(...*):?} */
+var dynCall_vifi = Module["dynCall_vifi"] = createExportWrapper("dynCall_vifi");
+/** @type {function(...*):?} */
+var dynCall_viji = Module["dynCall_viji"] = createExportWrapper("dynCall_viji");
+/** @type {function(...*):?} */
+var dynCall_viiiiiiiiiiii = Module["dynCall_viiiiiiiiiiii"] = createExportWrapper("dynCall_viiiiiiiiiiii");
+/** @type {function(...*):?} */
+var dynCall_viiiiiiiiiiiii = Module["dynCall_viiiiiiiiiiiii"] = createExportWrapper("dynCall_viiiiiiiiiiiii");
+/** @type {function(...*):?} */
+var dynCall_viiiiiiiiiiiiii = Module["dynCall_viiiiiiiiiiiiii"] = createExportWrapper("dynCall_viiiiiiiiiiiiii");
+/** @type {function(...*):?} */
+var dynCall_viiiiiiiiiiiiiiii = Module["dynCall_viiiiiiiiiiiiiiii"] = createExportWrapper("dynCall_viiiiiiiiiiiiiiii");
+/** @type {function(...*):?} */
+var dynCall_viiiiiiiiiiiiiiiii = Module["dynCall_viiiiiiiiiiiiiiiii"] = createExportWrapper("dynCall_viiiiiiiiiiiiiiiii");
+/** @type {function(...*):?} */
+var dynCall_viiiiiiiiiiiiiiiiii = Module["dynCall_viiiiiiiiiiiiiiiiii"] = createExportWrapper("dynCall_viiiiiiiiiiiiiiiiii");
+/** @type {function(...*):?} */
+var dynCall_viifi = Module["dynCall_viifi"] = createExportWrapper("dynCall_viifi");
+/** @type {function(...*):?} */
+var dynCall_viiiiiiii = Module["dynCall_viiiiiiii"] = createExportWrapper("dynCall_viiiiiiii");
+/** @type {function(...*):?} */
+var dynCall_viiiiiiiii = Module["dynCall_viiiiiiiii"] = createExportWrapper("dynCall_viiiiiiiii");
+/** @type {function(...*):?} */
+var dynCall_viiiiiiiiiii = Module["dynCall_viiiiiiiiiii"] = createExportWrapper("dynCall_viiiiiiiiiii");
+/** @type {function(...*):?} */
+var dynCall_viiji = Module["dynCall_viiji"] = createExportWrapper("dynCall_viiji");
+/** @type {function(...*):?} */
+var dynCall_iiiidii = Module["dynCall_iiiidii"] = createExportWrapper("dynCall_iiiidii");
+/** @type {function(...*):?} */
+var dynCall_vidi = Module["dynCall_vidi"] = createExportWrapper("dynCall_vidi");
+/** @type {function(...*):?} */
+var dynCall_viidi = Module["dynCall_viidi"] = createExportWrapper("dynCall_viidi");
+/** @type {function(...*):?} */
+var dynCall_iiifii = Module["dynCall_iiifii"] = createExportWrapper("dynCall_iiifii");
+/** @type {function(...*):?} */
 var dynCall_vijii = Module["dynCall_vijii"] = createExportWrapper("dynCall_vijii");
 /** @type {function(...*):?} */
 var dynCall_iijiii = Module["dynCall_iijiii"] = createExportWrapper("dynCall_iijiii");
 /** @type {function(...*):?} */
-var dynCall_iiiijii = Module["dynCall_iiiijii"] = createExportWrapper("dynCall_iiiijii");
+var dynCall_viiififiii = Module["dynCall_viiififiii"] = createExportWrapper("dynCall_viiififiii");
 /** @type {function(...*):?} */
-var dynCall_iiiifii = Module["dynCall_iiiifii"] = createExportWrapper("dynCall_iiiifii");
+var dynCall_fiiffi = Module["dynCall_fiiffi"] = createExportWrapper("dynCall_fiiffi");
 /** @type {function(...*):?} */
-var dynCall_viji = Module["dynCall_viji"] = createExportWrapper("dynCall_viji");
+var dynCall_viififiiii = Module["dynCall_viififiiii"] = createExportWrapper("dynCall_viififiiii");
 /** @type {function(...*):?} */
-var dynCall_viiji = Module["dynCall_viiji"] = createExportWrapper("dynCall_viiji");
+var dynCall_vififiiii = Module["dynCall_vififiiii"] = createExportWrapper("dynCall_vififiiii");
+/** @type {function(...*):?} */
+var dynCall_fiffi = Module["dynCall_fiffi"] = createExportWrapper("dynCall_fiffi");
+/** @type {function(...*):?} */
+var dynCall_viiiji = Module["dynCall_viiiji"] = createExportWrapper("dynCall_viiiji");
+/** @type {function(...*):?} */
+var dynCall_fffi = Module["dynCall_fffi"] = createExportWrapper("dynCall_fffi");
+/** @type {function(...*):?} */
+var dynCall_viifii = Module["dynCall_viifii"] = createExportWrapper("dynCall_viifii");
 /** @type {function(...*):?} */
 var dynCall_iji = Module["dynCall_iji"] = createExportWrapper("dynCall_iji");
 /** @type {function(...*):?} */
-var dynCall_iiiidii = Module["dynCall_iiiidii"] = createExportWrapper("dynCall_iiiidii");
-/** @type {function(...*):?} */
-var dynCall_iiijii = Module["dynCall_iiijii"] = createExportWrapper("dynCall_iiijii");
-/** @type {function(...*):?} */
-var dynCall_viifi = Module["dynCall_viifi"] = createExportWrapper("dynCall_viifi");
-/** @type {function(...*):?} */
-var dynCall_iiifii = Module["dynCall_iiifii"] = createExportWrapper("dynCall_iiifii");
-/** @type {function(...*):?} */
-var dynCall_viiiifii = Module["dynCall_viiiifii"] = createExportWrapper("dynCall_viiiifii");
+var dynCall_iiiiiiiiii = Module["dynCall_iiiiiiiiii"] = createExportWrapper("dynCall_iiiiiiiiii");
 /** @type {function(...*):?} */
 var dynCall_fii = Module["dynCall_fii"] = createExportWrapper("dynCall_fii");
 /** @type {function(...*):?} */
-var dynCall_vifi = Module["dynCall_vifi"] = createExportWrapper("dynCall_vifi");
-/** @type {function(...*):?} */
-var dynCall_viiffi = Module["dynCall_viiffi"] = createExportWrapper("dynCall_viiffi");
-/** @type {function(...*):?} */
-var dynCall_vidi = Module["dynCall_vidi"] = createExportWrapper("dynCall_vidi");
+var dynCall_viiiiiifii = Module["dynCall_viiiiiifii"] = createExportWrapper("dynCall_viiiiiifii");
 /** @type {function(...*):?} */
 var dynCall_iiji = Module["dynCall_iiji"] = createExportWrapper("dynCall_iiji");
 /** @type {function(...*):?} */
-var dynCall_ji = Module["dynCall_ji"] = createExportWrapper("dynCall_ji");
+var dynCall_iidi = Module["dynCall_iidi"] = createExportWrapper("dynCall_iidi");
 /** @type {function(...*):?} */
-var dynCall_viiiiiiii = Module["dynCall_viiiiiiii"] = createExportWrapper("dynCall_viiiiiiii");
+var dynCall_iifi = Module["dynCall_iifi"] = createExportWrapper("dynCall_iifi");
 /** @type {function(...*):?} */
-var dynCall_jdi = Module["dynCall_jdi"] = createExportWrapper("dynCall_jdi");
+var dynCall_ijji = Module["dynCall_ijji"] = createExportWrapper("dynCall_ijji");
 /** @type {function(...*):?} */
 var dynCall_jjji = Module["dynCall_jjji"] = createExportWrapper("dynCall_jjji");
 /** @type {function(...*):?} */
-var dynCall_vijjji = Module["dynCall_vijjji"] = createExportWrapper("dynCall_vijjji");
+var dynCall_ji = Module["dynCall_ji"] = createExportWrapper("dynCall_ji");
 /** @type {function(...*):?} */
-var dynCall_iiiiiiiiii = Module["dynCall_iiiiiiiiii"] = createExportWrapper("dynCall_iiiiiiiiii");
+var dynCall_jdi = Module["dynCall_jdi"] = createExportWrapper("dynCall_jdi");
 /** @type {function(...*):?} */
 var dynCall_dii = Module["dynCall_dii"] = createExportWrapper("dynCall_dii");
 /** @type {function(...*):?} */
 var dynCall_viijiiijiiii = Module["dynCall_viijiiijiiii"] = createExportWrapper("dynCall_viijiiijiiii");
 /** @type {function(...*):?} */
-var dynCall_ijji = Module["dynCall_ijji"] = createExportWrapper("dynCall_ijji");
+var dynCall_vijjji = Module["dynCall_vijjji"] = createExportWrapper("dynCall_vijjji");
 /** @type {function(...*):?} */
-var dynCall_viiiji = Module["dynCall_viiiji"] = createExportWrapper("dynCall_viiiji");
+var dynCall_jiii = Module["dynCall_jiii"] = createExportWrapper("dynCall_jiii");
 /** @type {function(...*):?} */
-var dynCall_viiiiiiiiiii = Module["dynCall_viiiiiiiiiii"] = createExportWrapper("dynCall_viiiiiiiiiii");
+var dynCall_iiijii = Module["dynCall_iiijii"] = createExportWrapper("dynCall_iiijii");
 /** @type {function(...*):?} */
 var dynCall_iijiiii = Module["dynCall_iijiiii"] = createExportWrapper("dynCall_iijiiii");
 /** @type {function(...*):?} */
@@ -18362,50 +18512,6 @@ var dynCall_iiiijjii = Module["dynCall_iiiijjii"] = createExportWrapper("dynCall
 /** @type {function(...*):?} */
 var dynCall_iijii = Module["dynCall_iijii"] = createExportWrapper("dynCall_iijii");
 /** @type {function(...*):?} */
-var dynCall_ifi = Module["dynCall_ifi"] = createExportWrapper("dynCall_ifi");
-/** @type {function(...*):?} */
-var dynCall_idi = Module["dynCall_idi"] = createExportWrapper("dynCall_idi");
-/** @type {function(...*):?} */
-var dynCall_jiii = Module["dynCall_jiii"] = createExportWrapper("dynCall_jiii");
-/** @type {function(...*):?} */
-var dynCall_viiiiiiiii = Module["dynCall_viiiiiiiii"] = createExportWrapper("dynCall_viiiiiiiii");
-/** @type {function(...*):?} */
-var dynCall_iiiiji = Module["dynCall_iiiiji"] = createExportWrapper("dynCall_iiiiji");
-/** @type {function(...*):?} */
-var dynCall_viiiiiiiiiiiii = Module["dynCall_viiiiiiiiiiiii"] = createExportWrapper("dynCall_viiiiiiiiiiiii");
-/** @type {function(...*):?} */
-var dynCall_fffi = Module["dynCall_fffi"] = createExportWrapper("dynCall_fffi");
-/** @type {function(...*):?} */
-var dynCall_jji = Module["dynCall_jji"] = createExportWrapper("dynCall_jji");
-/** @type {function(...*):?} */
-var dynCall_dddi = Module["dynCall_dddi"] = createExportWrapper("dynCall_dddi");
-/** @type {function(...*):?} */
-var dynCall_iidi = Module["dynCall_iidi"] = createExportWrapper("dynCall_iidi");
-/** @type {function(...*):?} */
-var dynCall_iifi = Module["dynCall_iifi"] = createExportWrapper("dynCall_iifi");
-/** @type {function(...*):?} */
-var dynCall_diiii = Module["dynCall_diiii"] = createExportWrapper("dynCall_diiii");
-/** @type {function(...*):?} */
-var dynCall_viifii = Module["dynCall_viifii"] = createExportWrapper("dynCall_viifii");
-/** @type {function(...*):?} */
-var dynCall_iiiifi = Module["dynCall_iiiifi"] = createExportWrapper("dynCall_iiiifi");
-/** @type {function(...*):?} */
-var dynCall_viiiiiifii = Module["dynCall_viiiiiifii"] = createExportWrapper("dynCall_viiiiiifii");
-/** @type {function(...*):?} */
-var dynCall_viiififiii = Module["dynCall_viiififiii"] = createExportWrapper("dynCall_viiififiii");
-/** @type {function(...*):?} */
-var dynCall_fiiffi = Module["dynCall_fiiffi"] = createExportWrapper("dynCall_fiiffi");
-/** @type {function(...*):?} */
-var dynCall_viififiiii = Module["dynCall_viififiiii"] = createExportWrapper("dynCall_viififiiii");
-/** @type {function(...*):?} */
-var dynCall_vififiiii = Module["dynCall_vififiiii"] = createExportWrapper("dynCall_vififiiii");
-/** @type {function(...*):?} */
-var dynCall_fiffi = Module["dynCall_fiffi"] = createExportWrapper("dynCall_fiffi");
-/** @type {function(...*):?} */
-var dynCall_viidi = Module["dynCall_viidi"] = createExportWrapper("dynCall_viidi");
-/** @type {function(...*):?} */
-var dynCall_vifii = Module["dynCall_vifii"] = createExportWrapper("dynCall_vifii");
-/** @type {function(...*):?} */
 var dynCall_j = Module["dynCall_j"] = createExportWrapper("dynCall_j");
 /** @type {function(...*):?} */
 var dynCall_iiiiiiiiiji = Module["dynCall_iiiiiiiiiji"] = createExportWrapper("dynCall_iiiiiiiiiji");
@@ -18414,17 +18520,27 @@ var dynCall_vji = Module["dynCall_vji"] = createExportWrapper("dynCall_vji");
 /** @type {function(...*):?} */
 var dynCall_jjii = Module["dynCall_jjii"] = createExportWrapper("dynCall_jjii");
 /** @type {function(...*):?} */
+var dynCall_ifi = Module["dynCall_ifi"] = createExportWrapper("dynCall_ifi");
+/** @type {function(...*):?} */
+var dynCall_idi = Module["dynCall_idi"] = createExportWrapper("dynCall_idi");
+/** @type {function(...*):?} */
+var dynCall_jji = Module["dynCall_jji"] = createExportWrapper("dynCall_jji");
+/** @type {function(...*):?} */
+var dynCall_diiii = Module["dynCall_diiii"] = createExportWrapper("dynCall_diiii");
+/** @type {function(...*):?} */
+var dynCall_dddi = Module["dynCall_dddi"] = createExportWrapper("dynCall_dddi");
+/** @type {function(...*):?} */
 var dynCall_dji = Module["dynCall_dji"] = createExportWrapper("dynCall_dji");
 /** @type {function(...*):?} */
-var dynCall_viiiiiiiiiiii = Module["dynCall_viiiiiiiiiiii"] = createExportWrapper("dynCall_viiiiiiiiiiii");
+var dynCall_iiiiji = Module["dynCall_iiiiji"] = createExportWrapper("dynCall_iiiiji");
 /** @type {function(...*):?} */
-var dynCall_viiiiiiiiiiiiii = Module["dynCall_viiiiiiiiiiiiii"] = createExportWrapper("dynCall_viiiiiiiiiiiiii");
+var dynCall_viiffi = Module["dynCall_viiffi"] = createExportWrapper("dynCall_viiffi");
 /** @type {function(...*):?} */
-var dynCall_viiiiiiiiiiiiiiii = Module["dynCall_viiiiiiiiiiiiiiii"] = createExportWrapper("dynCall_viiiiiiiiiiiiiiii");
+var dynCall_iiiifii = Module["dynCall_iiiifii"] = createExportWrapper("dynCall_iiiifii");
 /** @type {function(...*):?} */
-var dynCall_viiiiiiiiiiiiiiiii = Module["dynCall_viiiiiiiiiiiiiiiii"] = createExportWrapper("dynCall_viiiiiiiiiiiiiiiii");
+var dynCall_viiiifii = Module["dynCall_viiiifii"] = createExportWrapper("dynCall_viiiifii");
 /** @type {function(...*):?} */
-var dynCall_viiiiiiiiiiiiiiiiii = Module["dynCall_viiiiiiiiiiiiiiiiii"] = createExportWrapper("dynCall_viiiiiiiiiiiiiiiiii");
+var dynCall_vifii = Module["dynCall_vifii"] = createExportWrapper("dynCall_vifii");
 /** @type {function(...*):?} */
 var dynCall_jijii = Module["dynCall_jijii"] = createExportWrapper("dynCall_jijii");
 /** @type {function(...*):?} */
@@ -18434,11 +18550,13 @@ var dynCall_iiddi = Module["dynCall_iiddi"] = createExportWrapper("dynCall_iiddi
 /** @type {function(...*):?} */
 var dynCall_iiffi = Module["dynCall_iiffi"] = createExportWrapper("dynCall_iiffi");
 /** @type {function(...*):?} */
-var dynCall_iiifi = Module["dynCall_iiifi"] = createExportWrapper("dynCall_iiifi");
-/** @type {function(...*):?} */
 var dynCall_ddiii = Module["dynCall_ddiii"] = createExportWrapper("dynCall_ddiii");
 /** @type {function(...*):?} */
+var dynCall_iiifi = Module["dynCall_iiifi"] = createExportWrapper("dynCall_iiifi");
+/** @type {function(...*):?} */
 var dynCall_viiiifi = Module["dynCall_viiiifi"] = createExportWrapper("dynCall_viiiifi");
+/** @type {function(...*):?} */
+var dynCall_iiiifi = Module["dynCall_iiiifi"] = createExportWrapper("dynCall_iiiifi");
 /** @type {function(...*):?} */
 var dynCall_viiiiiiiiiiiiiiiiiii = Module["dynCall_viiiiiiiiiiiiiiiiiii"] = createExportWrapper("dynCall_viiiiiiiiiiiiiiiiiii");
 /** @type {function(...*):?} */
@@ -18458,9 +18576,9 @@ var dynCall_vjjjiiii = Module["dynCall_vjjjiiii"] = createExportWrapper("dynCall
 /** @type {function(...*):?} */
 var dynCall_vjiiiii = Module["dynCall_vjiiiii"] = createExportWrapper("dynCall_vjiiiii");
 /** @type {function(...*):?} */
-var dynCall_jiiiii = Module["dynCall_jiiiii"] = createExportWrapper("dynCall_jiiiii");
-/** @type {function(...*):?} */
 var dynCall_iijjii = Module["dynCall_iijjii"] = createExportWrapper("dynCall_iijjii");
+/** @type {function(...*):?} */
+var dynCall_jiiiii = Module["dynCall_jiiiii"] = createExportWrapper("dynCall_jiiiii");
 /** @type {function(...*):?} */
 var dynCall_viiffifii = Module["dynCall_viiffifii"] = createExportWrapper("dynCall_viiffifii");
 /** @type {function(...*):?} */
@@ -18613,12 +18731,6 @@ var dynCall_iiifiiii = Module["dynCall_iiifiiii"] = createExportWrapper("dynCall
 var dynCall_vifffffi = Module["dynCall_vifffffi"] = createExportWrapper("dynCall_vifffffi");
 /** @type {function(...*):?} */
 var dynCall_viiiiifi = Module["dynCall_viiiiifi"] = createExportWrapper("dynCall_viiiiifi");
-/** @type {function(...*):?} */
-var dynCall_iiifiiiiiii = Module["dynCall_iiifiiiiiii"] = createExportWrapper("dynCall_iiifiiiiiii");
-/** @type {function(...*):?} */
-var dynCall_iifiiiiiii = Module["dynCall_iifiiiiiii"] = createExportWrapper("dynCall_iifiiiiiii");
-/** @type {function(...*):?} */
-var dynCall_iiifiiiiiiii = Module["dynCall_iiifiiiiiiii"] = createExportWrapper("dynCall_iiifiiiiiiii");
 /** @type {function(...*):?} */
 var dynCall_viffiiii = Module["dynCall_viffiiii"] = createExportWrapper("dynCall_viffiiii");
 /** @type {function(...*):?} */
@@ -18894,7 +19006,23 @@ var dynCall_ijj = Module["dynCall_ijj"] = createExportWrapper("dynCall_ijj");
 /** @type {function(...*):?} */
 var dynCall_vjji = Module["dynCall_vjji"] = createExportWrapper("dynCall_vjji");
 /** @type {function(...*):?} */
-var dynCall_viiidd = Module["dynCall_viiidd"] = createExportWrapper("dynCall_viiidd");
+var dynCall_vffff = Module["dynCall_vffff"] = createExportWrapper("dynCall_vffff");
+/** @type {function(...*):?} */
+var dynCall_vfff = Module["dynCall_vfff"] = createExportWrapper("dynCall_vfff");
+/** @type {function(...*):?} */
+var dynCall_viffff = Module["dynCall_viffff"] = createExportWrapper("dynCall_viffff");
+/** @type {function(...*):?} */
+var dynCall_iiiij = Module["dynCall_iiiij"] = createExportWrapper("dynCall_iiiij");
+/** @type {function(...*):?} */
+var dynCall_iiijj = Module["dynCall_iiijj"] = createExportWrapper("dynCall_iiijj");
+/** @type {function(...*):?} */
+var dynCall_vid = Module["dynCall_vid"] = createExportWrapper("dynCall_vid");
+/** @type {function(...*):?} */
+var dynCall_vf = Module["dynCall_vf"] = createExportWrapper("dynCall_vf");
+/** @type {function(...*):?} */
+var dynCall_vff = Module["dynCall_vff"] = createExportWrapper("dynCall_vff");
+/** @type {function(...*):?} */
+var dynCall_iiij = Module["dynCall_iiij"] = createExportWrapper("dynCall_iiij");
 /** @type {function(...*):?} */
 var dynCall_viiiiiji = Module["dynCall_viiiiiji"] = createExportWrapper("dynCall_viiiiiji");
 /** @type {function(...*):?} */
@@ -18908,31 +19036,15 @@ var dynCall_viiff = Module["dynCall_viiff"] = createExportWrapper("dynCall_viiff
 /** @type {function(...*):?} */
 var dynCall_vifff = Module["dynCall_vifff"] = createExportWrapper("dynCall_vifff");
 /** @type {function(...*):?} */
-var dynCall_viffff = Module["dynCall_viffff"] = createExportWrapper("dynCall_viffff");
-/** @type {function(...*):?} */
 var dynCall_viifff = Module["dynCall_viifff"] = createExportWrapper("dynCall_viifff");
 /** @type {function(...*):?} */
 var dynCall_viff = Module["dynCall_viff"] = createExportWrapper("dynCall_viff");
 /** @type {function(...*):?} */
 var dynCall_vij = Module["dynCall_vij"] = createExportWrapper("dynCall_vij");
 /** @type {function(...*):?} */
+var dynCall_viiidd = Module["dynCall_viiidd"] = createExportWrapper("dynCall_viiidd");
+/** @type {function(...*):?} */
 var dynCall_ij = Module["dynCall_ij"] = createExportWrapper("dynCall_ij");
-/** @type {function(...*):?} */
-var dynCall_iiiij = Module["dynCall_iiiij"] = createExportWrapper("dynCall_iiiij");
-/** @type {function(...*):?} */
-var dynCall_iiijj = Module["dynCall_iiijj"] = createExportWrapper("dynCall_iiijj");
-/** @type {function(...*):?} */
-var dynCall_vid = Module["dynCall_vid"] = createExportWrapper("dynCall_vid");
-/** @type {function(...*):?} */
-var dynCall_vffff = Module["dynCall_vffff"] = createExportWrapper("dynCall_vffff");
-/** @type {function(...*):?} */
-var dynCall_vfff = Module["dynCall_vfff"] = createExportWrapper("dynCall_vfff");
-/** @type {function(...*):?} */
-var dynCall_vf = Module["dynCall_vf"] = createExportWrapper("dynCall_vf");
-/** @type {function(...*):?} */
-var dynCall_vff = Module["dynCall_vff"] = createExportWrapper("dynCall_vff");
-/** @type {function(...*):?} */
-var dynCall_iiij = Module["dynCall_iiij"] = createExportWrapper("dynCall_iiij");
 /** @type {function(...*):?} */
 var dynCall_viiiif = Module["dynCall_viiiif"] = createExportWrapper("dynCall_viiiif");
 /** @type {function(...*):?} */
@@ -19302,72 +19414,6 @@ function invoke_viiiii(index,a1,a2,a3,a4,a5) {
   }
 }
 
-function invoke_vidi(index,a1,a2,a3) {
-  var sp = stackSave();
-  try {
-    dynCall_vidi(index,a1,a2,a3);
-  } catch(e) {
-    stackRestore(sp);
-    if (!(e instanceof EmscriptenEH)) throw e;
-    _setThrew(1, 0);
-  }
-}
-
-function invoke_vifi(index,a1,a2,a3) {
-  var sp = stackSave();
-  try {
-    dynCall_vifi(index,a1,a2,a3);
-  } catch(e) {
-    stackRestore(sp);
-    if (!(e instanceof EmscriptenEH)) throw e;
-    _setThrew(1, 0);
-  }
-}
-
-function invoke_iifi(index,a1,a2,a3) {
-  var sp = stackSave();
-  try {
-    return dynCall_iifi(index,a1,a2,a3);
-  } catch(e) {
-    stackRestore(sp);
-    if (!(e instanceof EmscriptenEH)) throw e;
-    _setThrew(1, 0);
-  }
-}
-
-function invoke_iiif(index,a1,a2,a3) {
-  var sp = stackSave();
-  try {
-    return dynCall_iiif(index,a1,a2,a3);
-  } catch(e) {
-    stackRestore(sp);
-    if (!(e instanceof EmscriptenEH)) throw e;
-    _setThrew(1, 0);
-  }
-}
-
-function invoke_iiiifii(index,a1,a2,a3,a4,a5,a6) {
-  var sp = stackSave();
-  try {
-    return dynCall_iiiifii(index,a1,a2,a3,a4,a5,a6);
-  } catch(e) {
-    stackRestore(sp);
-    if (!(e instanceof EmscriptenEH)) throw e;
-    _setThrew(1, 0);
-  }
-}
-
-function invoke_iiiidii(index,a1,a2,a3,a4,a5,a6) {
-  var sp = stackSave();
-  try {
-    return dynCall_iiiidii(index,a1,a2,a3,a4,a5,a6);
-  } catch(e) {
-    stackRestore(sp);
-    if (!(e instanceof EmscriptenEH)) throw e;
-    _setThrew(1, 0);
-  }
-}
-
 function invoke_viifi(index,a1,a2,a3,a4) {
   var sp = stackSave();
   try {
@@ -19390,83 +19436,6 @@ function invoke_iiifii(index,a1,a2,a3,a4,a5) {
   }
 }
 
-function invoke_iiiiiiffiiiiiiiiiffffiii(index,a1,a2,a3,a4,a5,a6,a7,a8,a9,a10,a11,a12,a13,a14,a15,a16,a17,a18,a19,a20,a21,a22,a23) {
-  var sp = stackSave();
-  try {
-    return dynCall_iiiiiiffiiiiiiiiiffffiii(index,a1,a2,a3,a4,a5,a6,a7,a8,a9,a10,a11,a12,a13,a14,a15,a16,a17,a18,a19,a20,a21,a22,a23);
-  } catch(e) {
-    stackRestore(sp);
-    if (!(e instanceof EmscriptenEH)) throw e;
-    _setThrew(1, 0);
-  }
-}
-
-function invoke_fi(index,a1) {
-  var sp = stackSave();
-  try {
-    return dynCall_fi(index,a1);
-  } catch(e) {
-    stackRestore(sp);
-    if (!(e instanceof EmscriptenEH)) throw e;
-    _setThrew(1, 0);
-  }
-}
-
-function invoke_viifiii(index,a1,a2,a3,a4,a5,a6) {
-  var sp = stackSave();
-  try {
-    dynCall_viifiii(index,a1,a2,a3,a4,a5,a6);
-  } catch(e) {
-    stackRestore(sp);
-    if (!(e instanceof EmscriptenEH)) throw e;
-    _setThrew(1, 0);
-  }
-}
-
-function invoke_fii(index,a1,a2) {
-  var sp = stackSave();
-  try {
-    return dynCall_fii(index,a1,a2);
-  } catch(e) {
-    stackRestore(sp);
-    if (!(e instanceof EmscriptenEH)) throw e;
-    _setThrew(1, 0);
-  }
-}
-
-function invoke_viiifi(index,a1,a2,a3,a4,a5) {
-  var sp = stackSave();
-  try {
-    dynCall_viiifi(index,a1,a2,a3,a4,a5);
-  } catch(e) {
-    stackRestore(sp);
-    if (!(e instanceof EmscriptenEH)) throw e;
-    _setThrew(1, 0);
-  }
-}
-
-function invoke_viiffi(index,a1,a2,a3,a4,a5) {
-  var sp = stackSave();
-  try {
-    dynCall_viiffi(index,a1,a2,a3,a4,a5);
-  } catch(e) {
-    stackRestore(sp);
-    if (!(e instanceof EmscriptenEH)) throw e;
-    _setThrew(1, 0);
-  }
-}
-
-function invoke_viiiiiiii(index,a1,a2,a3,a4,a5,a6,a7,a8) {
-  var sp = stackSave();
-  try {
-    dynCall_viiiiiiii(index,a1,a2,a3,a4,a5,a6,a7,a8);
-  } catch(e) {
-    stackRestore(sp);
-    if (!(e instanceof EmscriptenEH)) throw e;
-    _setThrew(1, 0);
-  }
-}
-
 function invoke_iiiiiiiii(index,a1,a2,a3,a4,a5,a6,a7,a8) {
   var sp = stackSave();
   try {
@@ -19478,153 +19447,10 @@ function invoke_iiiiiiiii(index,a1,a2,a3,a4,a5,a6,a7,a8) {
   }
 }
 
-function invoke_viiiiiiiii(index,a1,a2,a3,a4,a5,a6,a7,a8,a9) {
+function invoke_viiiiiiii(index,a1,a2,a3,a4,a5,a6,a7,a8) {
   var sp = stackSave();
   try {
-    dynCall_viiiiiiiii(index,a1,a2,a3,a4,a5,a6,a7,a8,a9);
-  } catch(e) {
-    stackRestore(sp);
-    if (!(e instanceof EmscriptenEH)) throw e;
-    _setThrew(1, 0);
-  }
-}
-
-function invoke_iiiiiiiiii(index,a1,a2,a3,a4,a5,a6,a7,a8,a9) {
-  var sp = stackSave();
-  try {
-    return dynCall_iiiiiiiiii(index,a1,a2,a3,a4,a5,a6,a7,a8,a9);
-  } catch(e) {
-    stackRestore(sp);
-    if (!(e instanceof EmscriptenEH)) throw e;
-    _setThrew(1, 0);
-  }
-}
-
-function invoke_dii(index,a1,a2) {
-  var sp = stackSave();
-  try {
-    return dynCall_dii(index,a1,a2);
-  } catch(e) {
-    stackRestore(sp);
-    if (!(e instanceof EmscriptenEH)) throw e;
-    _setThrew(1, 0);
-  }
-}
-
-function invoke_ifi(index,a1,a2) {
-  var sp = stackSave();
-  try {
-    return dynCall_ifi(index,a1,a2);
-  } catch(e) {
-    stackRestore(sp);
-    if (!(e instanceof EmscriptenEH)) throw e;
-    _setThrew(1, 0);
-  }
-}
-
-function invoke_idi(index,a1,a2) {
-  var sp = stackSave();
-  try {
-    return dynCall_idi(index,a1,a2);
-  } catch(e) {
-    stackRestore(sp);
-    if (!(e instanceof EmscriptenEH)) throw e;
-    _setThrew(1, 0);
-  }
-}
-
-function invoke_viiiiiiiiiiii(index,a1,a2,a3,a4,a5,a6,a7,a8,a9,a10,a11,a12) {
-  var sp = stackSave();
-  try {
-    dynCall_viiiiiiiiiiii(index,a1,a2,a3,a4,a5,a6,a7,a8,a9,a10,a11,a12);
-  } catch(e) {
-    stackRestore(sp);
-    if (!(e instanceof EmscriptenEH)) throw e;
-    _setThrew(1, 0);
-  }
-}
-
-function invoke_viiiiiiiiiiiii(index,a1,a2,a3,a4,a5,a6,a7,a8,a9,a10,a11,a12,a13) {
-  var sp = stackSave();
-  try {
-    dynCall_viiiiiiiiiiiii(index,a1,a2,a3,a4,a5,a6,a7,a8,a9,a10,a11,a12,a13);
-  } catch(e) {
-    stackRestore(sp);
-    if (!(e instanceof EmscriptenEH)) throw e;
-    _setThrew(1, 0);
-  }
-}
-
-function invoke_fffi(index,a1,a2,a3) {
-  var sp = stackSave();
-  try {
-    return dynCall_fffi(index,a1,a2,a3);
-  } catch(e) {
-    stackRestore(sp);
-    if (!(e instanceof EmscriptenEH)) throw e;
-    _setThrew(1, 0);
-  }
-}
-
-function invoke_dddi(index,a1,a2,a3) {
-  var sp = stackSave();
-  try {
-    return dynCall_dddi(index,a1,a2,a3);
-  } catch(e) {
-    stackRestore(sp);
-    if (!(e instanceof EmscriptenEH)) throw e;
-    _setThrew(1, 0);
-  }
-}
-
-function invoke_iidi(index,a1,a2,a3) {
-  var sp = stackSave();
-  try {
-    return dynCall_iidi(index,a1,a2,a3);
-  } catch(e) {
-    stackRestore(sp);
-    if (!(e instanceof EmscriptenEH)) throw e;
-    _setThrew(1, 0);
-  }
-}
-
-function invoke_diiii(index,a1,a2,a3,a4) {
-  var sp = stackSave();
-  try {
-    return dynCall_diiii(index,a1,a2,a3,a4);
-  } catch(e) {
-    stackRestore(sp);
-    if (!(e instanceof EmscriptenEH)) throw e;
-    _setThrew(1, 0);
-  }
-}
-
-function invoke_viffi(index,a1,a2,a3,a4) {
-  var sp = stackSave();
-  try {
-    dynCall_viffi(index,a1,a2,a3,a4);
-  } catch(e) {
-    stackRestore(sp);
-    if (!(e instanceof EmscriptenEH)) throw e;
-    _setThrew(1, 0);
-  }
-}
-
-function invoke_viifii(index,a1,a2,a3,a4,a5) {
-  var sp = stackSave();
-  try {
-    dynCall_viifii(index,a1,a2,a3,a4,a5);
-  } catch(e) {
-    stackRestore(sp);
-    if (!(e instanceof EmscriptenEH)) throw e;
-    _setThrew(1, 0);
-  }
-}
-
-function invoke_viiiiiifii(index,a1,a2,a3,a4,a5,a6,a7,a8,a9) {
-  var sp = stackSave();
-  try {
-    dynCall_viiiiiifii(index,a1,a2,a3,a4,a5,a6,a7,a8,a9);
+    dynCall_viiiiiiii(index,a1,a2,a3,a4,a5,a6,a7,a8);
   } catch(e) {
     stackRestore(sp);
     if (!(e instanceof EmscriptenEH)) throw e;
@@ -19676,10 +19502,274 @@ function invoke_fiiffi(index,a1,a2,a3,a4,a5) {
   }
 }
 
+function invoke_iiiidii(index,a1,a2,a3,a4,a5,a6) {
+  var sp = stackSave();
+  try {
+    return dynCall_iiiidii(index,a1,a2,a3,a4,a5,a6);
+  } catch(e) {
+    stackRestore(sp);
+    if (!(e instanceof EmscriptenEH)) throw e;
+    _setThrew(1, 0);
+  }
+}
+
+function invoke_vidi(index,a1,a2,a3) {
+  var sp = stackSave();
+  try {
+    dynCall_vidi(index,a1,a2,a3);
+  } catch(e) {
+    stackRestore(sp);
+    if (!(e instanceof EmscriptenEH)) throw e;
+    _setThrew(1, 0);
+  }
+}
+
 function invoke_viidi(index,a1,a2,a3,a4) {
   var sp = stackSave();
   try {
     dynCall_viidi(index,a1,a2,a3,a4);
+  } catch(e) {
+    stackRestore(sp);
+    if (!(e instanceof EmscriptenEH)) throw e;
+    _setThrew(1, 0);
+  }
+}
+
+function invoke_dii(index,a1,a2) {
+  var sp = stackSave();
+  try {
+    return dynCall_dii(index,a1,a2);
+  } catch(e) {
+    stackRestore(sp);
+    if (!(e instanceof EmscriptenEH)) throw e;
+    _setThrew(1, 0);
+  }
+}
+
+function invoke_fii(index,a1,a2) {
+  var sp = stackSave();
+  try {
+    return dynCall_fii(index,a1,a2);
+  } catch(e) {
+    stackRestore(sp);
+    if (!(e instanceof EmscriptenEH)) throw e;
+    _setThrew(1, 0);
+  }
+}
+
+function invoke_vifi(index,a1,a2,a3) {
+  var sp = stackSave();
+  try {
+    dynCall_vifi(index,a1,a2,a3);
+  } catch(e) {
+    stackRestore(sp);
+    if (!(e instanceof EmscriptenEH)) throw e;
+    _setThrew(1, 0);
+  }
+}
+
+function invoke_fffi(index,a1,a2,a3) {
+  var sp = stackSave();
+  try {
+    return dynCall_fffi(index,a1,a2,a3);
+  } catch(e) {
+    stackRestore(sp);
+    if (!(e instanceof EmscriptenEH)) throw e;
+    _setThrew(1, 0);
+  }
+}
+
+function invoke_viifii(index,a1,a2,a3,a4,a5) {
+  var sp = stackSave();
+  try {
+    dynCall_viifii(index,a1,a2,a3,a4,a5);
+  } catch(e) {
+    stackRestore(sp);
+    if (!(e instanceof EmscriptenEH)) throw e;
+    _setThrew(1, 0);
+  }
+}
+
+function invoke_iiiiiiffiiiiiiiiiffffiii(index,a1,a2,a3,a4,a5,a6,a7,a8,a9,a10,a11,a12,a13,a14,a15,a16,a17,a18,a19,a20,a21,a22,a23) {
+  var sp = stackSave();
+  try {
+    return dynCall_iiiiiiffiiiiiiiiiffffiii(index,a1,a2,a3,a4,a5,a6,a7,a8,a9,a10,a11,a12,a13,a14,a15,a16,a17,a18,a19,a20,a21,a22,a23);
+  } catch(e) {
+    stackRestore(sp);
+    if (!(e instanceof EmscriptenEH)) throw e;
+    _setThrew(1, 0);
+  }
+}
+
+function invoke_iiiiiiiiii(index,a1,a2,a3,a4,a5,a6,a7,a8,a9) {
+  var sp = stackSave();
+  try {
+    return dynCall_iiiiiiiiii(index,a1,a2,a3,a4,a5,a6,a7,a8,a9);
+  } catch(e) {
+    stackRestore(sp);
+    if (!(e instanceof EmscriptenEH)) throw e;
+    _setThrew(1, 0);
+  }
+}
+
+function invoke_viiiiiiiii(index,a1,a2,a3,a4,a5,a6,a7,a8,a9) {
+  var sp = stackSave();
+  try {
+    dynCall_viiiiiiiii(index,a1,a2,a3,a4,a5,a6,a7,a8,a9);
+  } catch(e) {
+    stackRestore(sp);
+    if (!(e instanceof EmscriptenEH)) throw e;
+    _setThrew(1, 0);
+  }
+}
+
+function invoke_viiiiiifii(index,a1,a2,a3,a4,a5,a6,a7,a8,a9) {
+  var sp = stackSave();
+  try {
+    dynCall_viiiiiifii(index,a1,a2,a3,a4,a5,a6,a7,a8,a9);
+  } catch(e) {
+    stackRestore(sp);
+    if (!(e instanceof EmscriptenEH)) throw e;
+    _setThrew(1, 0);
+  }
+}
+
+function invoke_viiifi(index,a1,a2,a3,a4,a5) {
+  var sp = stackSave();
+  try {
+    dynCall_viiifi(index,a1,a2,a3,a4,a5);
+  } catch(e) {
+    stackRestore(sp);
+    if (!(e instanceof EmscriptenEH)) throw e;
+    _setThrew(1, 0);
+  }
+}
+
+function invoke_viifiii(index,a1,a2,a3,a4,a5,a6) {
+  var sp = stackSave();
+  try {
+    dynCall_viifiii(index,a1,a2,a3,a4,a5,a6);
+  } catch(e) {
+    stackRestore(sp);
+    if (!(e instanceof EmscriptenEH)) throw e;
+    _setThrew(1, 0);
+  }
+}
+
+function invoke_fi(index,a1) {
+  var sp = stackSave();
+  try {
+    return dynCall_fi(index,a1);
+  } catch(e) {
+    stackRestore(sp);
+    if (!(e instanceof EmscriptenEH)) throw e;
+    _setThrew(1, 0);
+  }
+}
+
+function invoke_ifi(index,a1,a2) {
+  var sp = stackSave();
+  try {
+    return dynCall_ifi(index,a1,a2);
+  } catch(e) {
+    stackRestore(sp);
+    if (!(e instanceof EmscriptenEH)) throw e;
+    _setThrew(1, 0);
+  }
+}
+
+function invoke_idi(index,a1,a2) {
+  var sp = stackSave();
+  try {
+    return dynCall_idi(index,a1,a2);
+  } catch(e) {
+    stackRestore(sp);
+    if (!(e instanceof EmscriptenEH)) throw e;
+    _setThrew(1, 0);
+  }
+}
+
+function invoke_iidi(index,a1,a2,a3) {
+  var sp = stackSave();
+  try {
+    return dynCall_iidi(index,a1,a2,a3);
+  } catch(e) {
+    stackRestore(sp);
+    if (!(e instanceof EmscriptenEH)) throw e;
+    _setThrew(1, 0);
+  }
+}
+
+function invoke_iifi(index,a1,a2,a3) {
+  var sp = stackSave();
+  try {
+    return dynCall_iifi(index,a1,a2,a3);
+  } catch(e) {
+    stackRestore(sp);
+    if (!(e instanceof EmscriptenEH)) throw e;
+    _setThrew(1, 0);
+  }
+}
+
+function invoke_diiii(index,a1,a2,a3,a4) {
+  var sp = stackSave();
+  try {
+    return dynCall_diiii(index,a1,a2,a3,a4);
+  } catch(e) {
+    stackRestore(sp);
+    if (!(e instanceof EmscriptenEH)) throw e;
+    _setThrew(1, 0);
+  }
+}
+
+function invoke_dddi(index,a1,a2,a3) {
+  var sp = stackSave();
+  try {
+    return dynCall_dddi(index,a1,a2,a3);
+  } catch(e) {
+    stackRestore(sp);
+    if (!(e instanceof EmscriptenEH)) throw e;
+    _setThrew(1, 0);
+  }
+}
+
+function invoke_viiiiiiiiiiii(index,a1,a2,a3,a4,a5,a6,a7,a8,a9,a10,a11,a12) {
+  var sp = stackSave();
+  try {
+    dynCall_viiiiiiiiiiii(index,a1,a2,a3,a4,a5,a6,a7,a8,a9,a10,a11,a12);
+  } catch(e) {
+    stackRestore(sp);
+    if (!(e instanceof EmscriptenEH)) throw e;
+    _setThrew(1, 0);
+  }
+}
+
+function invoke_viiiiiiiiiiiii(index,a1,a2,a3,a4,a5,a6,a7,a8,a9,a10,a11,a12,a13) {
+  var sp = stackSave();
+  try {
+    dynCall_viiiiiiiiiiiii(index,a1,a2,a3,a4,a5,a6,a7,a8,a9,a10,a11,a12,a13);
+  } catch(e) {
+    stackRestore(sp);
+    if (!(e instanceof EmscriptenEH)) throw e;
+    _setThrew(1, 0);
+  }
+}
+
+function invoke_viffi(index,a1,a2,a3,a4) {
+  var sp = stackSave();
+  try {
+    dynCall_viffi(index,a1,a2,a3,a4);
+  } catch(e) {
+    stackRestore(sp);
+    if (!(e instanceof EmscriptenEH)) throw e;
+    _setThrew(1, 0);
+  }
+}
+
+function invoke_viiffi(index,a1,a2,a3,a4,a5) {
+  var sp = stackSave();
+  try {
+    dynCall_viiffi(index,a1,a2,a3,a4,a5);
   } catch(e) {
     stackRestore(sp);
     if (!(e instanceof EmscriptenEH)) throw e;
@@ -19698,10 +19788,21 @@ function invoke_vifii(index,a1,a2,a3,a4) {
   }
 }
 
-function invoke_iiifi(index,a1,a2,a3,a4) {
+function invoke_iiiifii(index,a1,a2,a3,a4,a5,a6) {
   var sp = stackSave();
   try {
-    return dynCall_iiifi(index,a1,a2,a3,a4);
+    return dynCall_iiiifii(index,a1,a2,a3,a4,a5,a6);
+  } catch(e) {
+    stackRestore(sp);
+    if (!(e instanceof EmscriptenEH)) throw e;
+    _setThrew(1, 0);
+  }
+}
+
+function invoke_viiff(index,a1,a2,a3,a4) {
+  var sp = stackSave();
+  try {
+    dynCall_viiff(index,a1,a2,a3,a4);
   } catch(e) {
     stackRestore(sp);
     if (!(e instanceof EmscriptenEH)) throw e;
@@ -19720,10 +19821,10 @@ function invoke_ddiii(index,a1,a2,a3,a4) {
   }
 }
 
-function invoke_viiff(index,a1,a2,a3,a4) {
+function invoke_iiifi(index,a1,a2,a3,a4) {
   var sp = stackSave();
   try {
-    dynCall_viiff(index,a1,a2,a3,a4);
+    return dynCall_iiifi(index,a1,a2,a3,a4);
   } catch(e) {
     stackRestore(sp);
     if (!(e instanceof EmscriptenEH)) throw e;
@@ -19885,10 +19986,43 @@ function invoke_iijiii(index,a1,a2,a3,a4,a5,a6) {
   }
 }
 
-function invoke_viji(index,a1,a2,a3,a4) {
+function invoke_jiiiiiiiiii(index,a1,a2,a3,a4,a5,a6,a7,a8,a9,a10) {
   var sp = stackSave();
   try {
-    dynCall_viji(index,a1,a2,a3,a4);
+    return dynCall_jiiiiiiiiii(index,a1,a2,a3,a4,a5,a6,a7,a8,a9,a10);
+  } catch(e) {
+    stackRestore(sp);
+    if (!(e instanceof EmscriptenEH)) throw e;
+    _setThrew(1, 0);
+  }
+}
+
+function invoke_ijji(index,a1,a2,a3,a4,a5) {
+  var sp = stackSave();
+  try {
+    return dynCall_ijji(index,a1,a2,a3,a4,a5);
+  } catch(e) {
+    stackRestore(sp);
+    if (!(e instanceof EmscriptenEH)) throw e;
+    _setThrew(1, 0);
+  }
+}
+
+function invoke_jijii(index,a1,a2,a3,a4,a5) {
+  var sp = stackSave();
+  try {
+    return dynCall_jijii(index,a1,a2,a3,a4,a5);
+  } catch(e) {
+    stackRestore(sp);
+    if (!(e instanceof EmscriptenEH)) throw e;
+    _setThrew(1, 0);
+  }
+}
+
+function invoke_jjji(index,a1,a2,a3,a4,a5) {
+  var sp = stackSave();
+  try {
+    return dynCall_jjji(index,a1,a2,a3,a4,a5);
   } catch(e) {
     stackRestore(sp);
     if (!(e instanceof EmscriptenEH)) throw e;
@@ -19907,6 +20041,17 @@ function invoke_iiiijii(index,a1,a2,a3,a4,a5,a6,a7) {
   }
 }
 
+function invoke_viji(index,a1,a2,a3,a4) {
+  var sp = stackSave();
+  try {
+    dynCall_viji(index,a1,a2,a3,a4);
+  } catch(e) {
+    stackRestore(sp);
+    if (!(e instanceof EmscriptenEH)) throw e;
+    _setThrew(1, 0);
+  }
+}
+
 function invoke_viiji(index,a1,a2,a3,a4,a5) {
   var sp = stackSave();
   try {
@@ -19918,10 +20063,43 @@ function invoke_viiji(index,a1,a2,a3,a4,a5) {
   }
 }
 
-function invoke_iiijii(index,a1,a2,a3,a4,a5,a6) {
+function invoke_viiiji(index,a1,a2,a3,a4,a5,a6) {
   var sp = stackSave();
   try {
-    return dynCall_iiijii(index,a1,a2,a3,a4,a5,a6);
+    dynCall_viiiji(index,a1,a2,a3,a4,a5,a6);
+  } catch(e) {
+    stackRestore(sp);
+    if (!(e instanceof EmscriptenEH)) throw e;
+    _setThrew(1, 0);
+  }
+}
+
+function invoke_jdi(index,a1,a2) {
+  var sp = stackSave();
+  try {
+    return dynCall_jdi(index,a1,a2);
+  } catch(e) {
+    stackRestore(sp);
+    if (!(e instanceof EmscriptenEH)) throw e;
+    _setThrew(1, 0);
+  }
+}
+
+function invoke_viijiiijiiii(index,a1,a2,a3,a4,a5,a6,a7,a8,a9,a10,a11,a12,a13) {
+  var sp = stackSave();
+  try {
+    dynCall_viijiiijiiii(index,a1,a2,a3,a4,a5,a6,a7,a8,a9,a10,a11,a12,a13);
+  } catch(e) {
+    stackRestore(sp);
+    if (!(e instanceof EmscriptenEH)) throw e;
+    _setThrew(1, 0);
+  }
+}
+
+function invoke_vijjji(index,a1,a2,a3,a4,a5,a6,a7,a8) {
+  var sp = stackSave();
+  try {
+    dynCall_vijjji(index,a1,a2,a3,a4,a5,a6,a7,a8);
   } catch(e) {
     stackRestore(sp);
     if (!(e instanceof EmscriptenEH)) throw e;
@@ -19984,94 +20162,6 @@ function invoke_iijiiiiii(index,a1,a2,a3,a4,a5,a6,a7,a8,a9) {
   }
 }
 
-function invoke_jdi(index,a1,a2) {
-  var sp = stackSave();
-  try {
-    return dynCall_jdi(index,a1,a2);
-  } catch(e) {
-    stackRestore(sp);
-    if (!(e instanceof EmscriptenEH)) throw e;
-    _setThrew(1, 0);
-  }
-}
-
-function invoke_jjji(index,a1,a2,a3,a4,a5) {
-  var sp = stackSave();
-  try {
-    return dynCall_jjji(index,a1,a2,a3,a4,a5);
-  } catch(e) {
-    stackRestore(sp);
-    if (!(e instanceof EmscriptenEH)) throw e;
-    _setThrew(1, 0);
-  }
-}
-
-function invoke_vijjji(index,a1,a2,a3,a4,a5,a6,a7,a8) {
-  var sp = stackSave();
-  try {
-    dynCall_vijjji(index,a1,a2,a3,a4,a5,a6,a7,a8);
-  } catch(e) {
-    stackRestore(sp);
-    if (!(e instanceof EmscriptenEH)) throw e;
-    _setThrew(1, 0);
-  }
-}
-
-function invoke_jijii(index,a1,a2,a3,a4,a5) {
-  var sp = stackSave();
-  try {
-    return dynCall_jijii(index,a1,a2,a3,a4,a5);
-  } catch(e) {
-    stackRestore(sp);
-    if (!(e instanceof EmscriptenEH)) throw e;
-    _setThrew(1, 0);
-  }
-}
-
-function invoke_viijiiijiiii(index,a1,a2,a3,a4,a5,a6,a7,a8,a9,a10,a11,a12,a13) {
-  var sp = stackSave();
-  try {
-    dynCall_viijiiijiiii(index,a1,a2,a3,a4,a5,a6,a7,a8,a9,a10,a11,a12,a13);
-  } catch(e) {
-    stackRestore(sp);
-    if (!(e instanceof EmscriptenEH)) throw e;
-    _setThrew(1, 0);
-  }
-}
-
-function invoke_ijji(index,a1,a2,a3,a4,a5) {
-  var sp = stackSave();
-  try {
-    return dynCall_ijji(index,a1,a2,a3,a4,a5);
-  } catch(e) {
-    stackRestore(sp);
-    if (!(e instanceof EmscriptenEH)) throw e;
-    _setThrew(1, 0);
-  }
-}
-
-function invoke_viiiji(index,a1,a2,a3,a4,a5,a6) {
-  var sp = stackSave();
-  try {
-    dynCall_viiiji(index,a1,a2,a3,a4,a5,a6);
-  } catch(e) {
-    stackRestore(sp);
-    if (!(e instanceof EmscriptenEH)) throw e;
-    _setThrew(1, 0);
-  }
-}
-
-function invoke_jji(index,a1,a2,a3) {
-  var sp = stackSave();
-  try {
-    return dynCall_jji(index,a1,a2,a3);
-  } catch(e) {
-    stackRestore(sp);
-    if (!(e instanceof EmscriptenEH)) throw e;
-    _setThrew(1, 0);
-  }
-}
-
 function invoke_iiiiiiiiiji(index,a1,a2,a3,a4,a5,a6,a7,a8,a9,a10,a11) {
   var sp = stackSave();
   try {
@@ -20105,6 +20195,17 @@ function invoke_jjii(index,a1,a2,a3,a4) {
   }
 }
 
+function invoke_jji(index,a1,a2,a3) {
+  var sp = stackSave();
+  try {
+    return dynCall_jji(index,a1,a2,a3);
+  } catch(e) {
+    stackRestore(sp);
+    if (!(e instanceof EmscriptenEH)) throw e;
+    _setThrew(1, 0);
+  }
+}
+
 function invoke_dji(index,a1,a2,a3) {
   var sp = stackSave();
   try {
@@ -20116,10 +20217,10 @@ function invoke_dji(index,a1,a2,a3) {
   }
 }
 
-function invoke_jiiiiiiiiii(index,a1,a2,a3,a4,a5,a6,a7,a8,a9,a10) {
+function invoke_iiijii(index,a1,a2,a3,a4,a5,a6) {
   var sp = stackSave();
   try {
-    return dynCall_jiiiiiiiiii(index,a1,a2,a3,a4,a5,a6,a7,a8,a9,a10);
+    return dynCall_iiijii(index,a1,a2,a3,a4,a5,a6);
   } catch(e) {
     stackRestore(sp);
     if (!(e instanceof EmscriptenEH)) throw e;
@@ -20182,10 +20283,10 @@ function invoke_vjiiiii(index,a1,a2,a3,a4,a5,a6,a7) {
   }
 }
 
-function invoke_jiiiii(index,a1,a2,a3,a4,a5) {
+function invoke_iijjii(index,a1,a2,a3,a4,a5,a6,a7) {
   var sp = stackSave();
   try {
-    return dynCall_jiiiii(index,a1,a2,a3,a4,a5);
+    return dynCall_iijjii(index,a1,a2,a3,a4,a5,a6,a7);
   } catch(e) {
     stackRestore(sp);
     if (!(e instanceof EmscriptenEH)) throw e;
@@ -20193,10 +20294,10 @@ function invoke_jiiiii(index,a1,a2,a3,a4,a5) {
   }
 }
 
-function invoke_iijjii(index,a1,a2,a3,a4,a5,a6,a7) {
+function invoke_jiiiii(index,a1,a2,a3,a4,a5) {
   var sp = stackSave();
   try {
-    return dynCall_iijjii(index,a1,a2,a3,a4,a5,a6,a7);
+    return dynCall_jiiiii(index,a1,a2,a3,a4,a5);
   } catch(e) {
     stackRestore(sp);
     if (!(e instanceof EmscriptenEH)) throw e;
@@ -20516,9 +20617,6 @@ var unexportedSymbols = [
   'allocateUTF8',
   'allocateUTF8OnStack',
   'WEBAudio',
-  'jsAudioAddPendingBlockedAudio',
-  'jsAudioPlayPendingBlockedAudio',
-  'jsAudioPlayBlockedAudios',
   'jsAudioMixinSetPitch',
   'jsAudioGetMimeTypeFromType',
   'jsAudioCreateCompressedSoundClip',
@@ -20626,6 +20724,9 @@ var unexportedSymbols = [
   'JS_DeviceMotion_add',
   'JS_DeviceMotion_remove',
   'IDBFS',
+  'miniTempWebGLUIntBuffers',
+  'computeUnpackAlignedImageSize3D',
+  'emscriptenWebGLGetTexPixelData3D',
   'videoInstances',
   'videoInstanceIdCounter',
   'hasSRGBATextures',
