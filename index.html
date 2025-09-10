@@ -4,52 +4,31 @@
     <meta charset="utf-8">
     <meta http-equiv="Content-Type" content="text/html; charset=utf-8">
     <title>浚渫シミュレーター</title>
-    <meta name="apple-mobile-web-app-capable" content="yes">
-    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <link rel="shortcut icon" href="TemplateData/favicon.ico">
     <link rel="stylesheet" href="TemplateData/style.css">
     <link rel="manifest" href="manifest.webmanifest">
     <style>
-      :root { --vh: 1vh; }
-      body {
+      html, body {
         margin: 0;
-        overflow: hidden;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        height: 100vh;
-        position: relative;
+        padding: 0;
+        width: 100%;
+        height: 100%;
+        overflow: hidden; /* Prevent scrolling */
       }
 
-      canvas {
-        display: block;
-        background: #231F20;
-      }
-
-      /* iOS Safari pseudo-fullscreen using dynamic viewport unit */
-      .ios-fs {
+      #unity-container {
         position: fixed;
         top: 0;
         left: 0;
-        right: 0;
-        bottom: 0;
-        width: 100vw;
-        height: 100vh;
-        height: calc(var(--vh) * 100);
-        overflow: hidden;
-        user-select: none;
-        -webkit-user-select: none;
-        -webkit-touch-callout: none;
-      }
-      .ios-fs #unity-container,
-      .ios-fs #unity-canvas {
-        position: absolute;
-        top: 0;
-        left: 0;
-        right: 0;
-        bottom: 0;
         width: 100%;
         height: 100%;
+      }
+
+      #unity-canvas {
+        display: block;
+        width: 100%;
+        height: 100%;
+        background: #231F20;
       }
     </style>
   </head>
@@ -68,7 +47,7 @@
         </div>
         <p id="loading-text">Now Loading...</p>
       </div>
-      <div id="unity-warning"> </div>
+      <div id="unity-warning"></div>
     </div>
     <div id="start-overlay" style="
       position: absolute;
@@ -89,96 +68,39 @@
     <script>
       const overlay = document.getElementById("start-overlay");
       const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
-      const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
-
-      function setVhUnit() {
-        const viewportHeight = (window.visualViewport ? window.visualViewport.height : window.innerHeight);
-        const vh = viewportHeight * 0.01;
-        document.documentElement.style.setProperty('--vh', `${vh}px`);
-      }
-
-      function applyIOSPseudoFullscreen() {
-        setVhUnit();
-        document.body.classList.add('ios-fs');
-        
-        // Hide URL bar by scrolling and manipulating viewport
-        const hideUrlBar = () => {
-          // Force scroll to hide URL bar
-          window.scrollTo(0, 1);
-          // Temporarily increase body height to enable scrolling
-          const originalHeight = document.body.style.height;
-          document.body.style.height = '200vh';
-          setTimeout(() => {
-            window.scrollTo(0, 1);
-            document.body.style.height = originalHeight;
-          }, 100);
-        };
-        
-        // Initial URL bar hiding
-        hideUrlBar();
-        
-        // Hide URL bar on scroll
-        let scrollTimeout;
-        window.addEventListener('scroll', () => {
-          clearTimeout(scrollTimeout);
-          scrollTimeout = setTimeout(() => {
-            window.scrollTo(0, 1);
-          }, 50);
-        }, { passive: true });
-        
-        // Hide URL bar on touch
-        document.addEventListener('touchstart', hideUrlBar, { passive: true });
-        
-        const onResize = () => { 
-          setVhUnit(); 
-          hideUrlBar(); // Re-hide URL bar on resize
-        };
-        window.addEventListener('resize', onResize);
-        window.addEventListener('orientationchange', onResize);
-      }
 
       async function enterFullscreen() {
         try {
-          if (isIOS) {
-            // iOS Safari does not support Element Fullscreen for arbitrary elements.
-            // Simulate fullscreen by sizing to the dynamic viewport and attempt orientation lock best-effort.
-            applyIOSPseudoFullscreen();
-            if (screen.orientation && screen.orientation.lock) {
-              try { await screen.orientation.lock('landscape-primary'); } catch(_) {}
-            }
-          } else {
-            const element = document.documentElement;
-            if (element.requestFullscreen) {
-              await element.requestFullscreen();
-            } else if (element.webkitRequestFullscreen) {
-              await element.webkitRequestFullscreen();
-            } else if (element.mozRequestFullScreen) {
-              await element.mozRequestFullScreen();
-            } else if (element.msRequestFullscreen) {
-              await element.msRequestFullscreen();
-            }
-            if (screen.orientation && screen.orientation.lock) {
-              await screen.orientation.lock("landscape-primary");
-            }
+          const element = document.documentElement;
+          if (element.requestFullscreen) {
+            await element.requestFullscreen();
+          } else if (element.webkitRequestFullscreen) {
+            await element.webkitRequestFullscreen();
+          } else if (element.mozRequestFullScreen) {
+            await element.mozRequestFullScreen();
+          } else if (element.msRequestFullscreen) {
+            await element.msRequestFullscreen();
           }
+          await screen.orientation.lock("landscape-primary");
         } catch (err) {
           console.warn("Fullscreen or orientation lock failed:", err);
         }
       }
 
       if (isMobile) {
-          overlay.style.display = "flex";
-          overlay.addEventListener("click", async () => {
-            await enterFullscreen();
-            overlay.style.display = "none";
-          });
+        overlay.style.display = "flex";
+        overlay.addEventListener("click", async () => {
+          await enterFullscreen();
+          overlay.style.display = "none";
+        });
 
-          document.addEventListener("fullscreenchange", () => {
-            if (!document.fullscreenElement) {
-              overlay.style.display = "flex";
-            }
-          });
+        document.addEventListener("fullscreenchange", () => {
+          if (!document.fullscreenElement) {
+            overlay.style.display = "flex";
+          }
+        });
       }
+
       window.addEventListener("load", function () {
         if ("serviceWorker" in navigator) {
           navigator.serviceWorker.register("ServiceWorker.js");
@@ -225,7 +147,7 @@
         if (/iPhone|iPad|iPod|Android/i.test(navigator.userAgent)) {
           var meta = document.createElement('meta');
           meta.name = 'viewport';
-          meta.content = 'width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, shrink-to-fit=yes, viewport-fit=cover';
+          meta.content = 'width=device-width, height=device-height, initial-scale=1.0, user-scalable=no, shrink-to-fit=yes';
           document.getElementsByTagName('head')[0].appendChild(meta);
         }
 
@@ -241,7 +163,6 @@
             document.getElementById("boat-icon").style.left = boatPosition + "%";
           }).then((unityInstance) => {
             loadingBar.style.display = "none";
-
           }).catch((message) => {
             alert(message);
           });
