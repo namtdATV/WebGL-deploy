@@ -87,11 +87,32 @@
         }
       }
 
+      function resumeAudio() {
+        try {
+          if (typeof AudioContext !== "undefined") {
+            let ctx;
+            if (window.UnityLoader && UnityLoader.SystemInfo?.context) {
+              ctx = UnityLoader.SystemInfo.context;
+            } else {
+              ctx = window.audioContext || new (window.AudioContext || window.webkitAudioContext)();
+              window.audioContext = ctx;
+            }
+            if (ctx && ctx.state === "suspended") {
+              ctx.resume();
+            }
+          }
+        } catch (err) {
+          console.warn("Audio resume failed:", err);
+        }
+      }
+
       if (isMobile) {
         overlay.style.display = "flex";
         overlay.addEventListener("click", async () => {
           await enterFullscreen();
           overlay.style.display = "none";
+
+          resumeAudio();
         });
 
         document.addEventListener("fullscreenchange", () => {
@@ -99,6 +120,10 @@
             overlay.style.display = "flex";
           }
         });
+
+        document.addEventListener("touchend", () => {
+          resumeAudio();
+        }, { once: true });
       }
 
       window.addEventListener("load", function () {
