@@ -1,9 +1,9 @@
 const cacheName = "tac-wakachiku-0.1";
 const contentToCache = [
     "Build/Wakachiku.loader.js",
-    "Build/Wakachiku.framework.js.br",
-    "Build/Wakachiku.data.br",
-    "Build/Wakachiku.wasm.br",
+    "Build/Wakachiku_brotli.framework.js",
+    "Build/Wakachiku_brotli.data",
+    "Build/Wakachiku_brotli.wasm",
     "TemplateData/style.css"
 
 ];
