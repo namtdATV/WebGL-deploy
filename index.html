@@ -49,6 +49,8 @@
       </div>
       <div id="unity-warning"></div>
     </div>
+
+    <!-- Overlay -->
     <div id="start-overlay" style="
       position: absolute;
       top: 0;
@@ -58,16 +60,19 @@
       background: rgba(0, 0, 0, 0.8);
       color: white;
       display: none;
+      flex-direction: column;
       align-items: center;
       justify-content: center;
-      font-size: 24px;
       z-index: 9999;
-      cursor: pointer;">
-      Click to Start
+      cursor: pointer;
+      text-align: center;">
     </div>
+
     <script>
       const overlay = document.getElementById("start-overlay");
-      const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
+      const ua = navigator.userAgent;
+      const isAndroid = /Android/i.test(ua);
+      const isIOS = /iPhone|iPad|iPod/i.test(ua);
 
       async function enterFullscreen() {
         try {
@@ -87,7 +92,27 @@
         }
       }
 
-      if (isMobile) {
+      // Show overlay based on platform
+      if (isAndroid) {
+        overlay.innerHTML = `
+          <p class="start-line1">画面をタップしてください</p>
+          <p class="start-line2">※自動で横向き全画面になります。</p>
+        `;
+      } else if (isIOS) {
+        overlay.innerHTML = `
+          <p class="start-line1">画面をタップしてください</p>
+          <p class="start-line2">
+            ※「画面縦向きのロック」をオフにし、<br>
+            端末を横向きにしてください。
+          </p>
+        `;
+      } else {
+        overlay.innerHTML = `
+          <p class="start-line1">画面をクリックしてください</p>
+        `;
+      }
+
+      if (isAndroid || isIOS) {
         overlay.style.display = "flex";
         overlay.addEventListener("click", async () => {
           await enterFullscreen();
